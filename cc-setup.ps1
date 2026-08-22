@@ -49,7 +49,8 @@ New-Item -ItemType Directory -Force -Path $providersDir | Out-Null
 # ---------- 数据层 ----------
 
 function Get-Providers {
-    @(Get-ChildItem -LiteralPath $providersDir -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object {
+    # Where BaseName：跳过名为 ".json" 之类的空名文件（历史遗留会在列表里变成无名幽灵行）
+    @(Get-ChildItem -LiteralPath $providersDir -Filter '*.json' -ErrorAction SilentlyContinue | Where-Object { $_.BaseName } | Sort-Object Name | ForEach-Object {
         $envObj = $null
         try { $envObj = (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).env } catch {}
         $token = if ($envObj) { [string]$envObj.ANTHROPIC_AUTH_TOKEN } else { '' }
@@ -122,6 +123,8 @@ function Show-EditDialog($existing) {
     $dlg.MaximizeBox     = $false
     $dlg.StartPosition   = 'CenterParent'
     $dlg.ClientSize      = New-Object System.Drawing.Size(470, 470)
+    # 主窗口是 TopMost，编辑框不置顶、不挂 owner 会被挡在主窗口后面
+    $dlg.TopMost         = $true
 
     function Add-Label([string]$text, [int]$x, [int]$y) {
         $l = New-Object System.Windows.Forms.Label
@@ -136,7 +139,7 @@ function Show-EditDialog($existing) {
 
     Add-Label '名称（英文，作为菜单/命令里的标识）' 14 14   | Out-Null
     $tbName = Add-Box 14 34 200
-    $tbName.Enabled = $isNew
+    if (-not $isNew) { $tbName.Text = $existing.Name }   # 预填现名，允许改名（保存时重命名文件）
 
     Add-Label '接口地址 ANTHROPIC_BASE_URL（官方留空）' 14 66 | Out-Null
     $tbUrl = Add-Box 14 86 440
@@ -209,15 +212,16 @@ function Show-EditDialog($existing) {
         $tbTimeout.Text = [string]$existing.Env.API_TIMEOUT_MS
     }
 
-    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return $null }
+    if ($dlg.ShowDialog($form) -ne [System.Windows.Forms.DialogResult]::OK) { return $null }
 
     $name = $tbName.Text.Trim()
-    if ($isNew -and $name -notmatch '^[A-Za-z0-9_-]+$') {
-        [void][System.Windows.Forms.MessageBox]::Show('名称只能用英文、数字、-、_（方便命令行 cc <名称> 使用）', '提示')
+    if ($name -notmatch '^[A-Za-z0-9_-]+$') {
+        [void][System.Windows.Forms.MessageBox]::Show($dlg, '名称只能用英文、数字、-、_（方便命令行 cc <名称> 使用）', '提示')
         return $null
     }
-    if ($isNew -and (Test-Path -LiteralPath (Join-Path $providersDir ($name + '.json')))) {
-        [void][System.Windows.Forms.MessageBox]::Show("已存在同名配置: $name", '提示')
+    $oldName = if ($isNew) { $null } else { $existing.Name }
+    if ($name -ne $oldName -and (Test-Path -LiteralPath (Join-Path $providersDir ($name + '.json')))) {
+        [void][System.Windows.Forms.MessageBox]::Show($dlg, "已存在同名配置: $name", '提示')
         return $null
     }
 
@@ -233,7 +237,7 @@ function Show-EditDialog($existing) {
     $env['ANTHROPIC_DEFAULT_SONNET_MODEL_NAME']    = $tbSonnet.Text.Trim() -replace '\[.*$', ''
     $env['API_TIMEOUT_MS']                    = $tbTimeout.Text.Trim()
 
-    return @{ Name = $name; Env = $env }
+    return @{ Name = $name; Env = $env; OldName = $oldName }
 }
 
 # ---------- 主窗口 ----------
@@ -244,15 +248,17 @@ $form.StartPosition = 'CenterScreen'
 $form.ClientSize    = New-Object System.Drawing.Size(700, 420)
 $form.TopMost       = $true
 
-$list = New-Object System.Windows.Forms.ListView
-$list.View = 'Details'; $list.FullRowSelect = $true; $list.HideSelection = $false
-$list.Location = New-Object System.Drawing.Point(12, 12)
-$list.Size     = New-Object System.Drawing.Size(676, 330)
-[void]$list.Columns.Add('名称', 130)
-[void]$list.Columns.Add('接口地址', 240)
-[void]$list.Columns.Add('Token', 150)
-[void]$list.Columns.Add('主模型', 150)
-$form.Controls.Add($list)
+# 注意：变量名不能用 $list——与顶部 param([switch]$List) 同名（PS 变量名不区分大小写），
+# 会被当作 switch 参数赋值而报 SwitchParameter 转换错误
+$listView = New-Object System.Windows.Forms.ListView
+$listView.View = 'Details'; $listView.FullRowSelect = $true; $listView.HideSelection = $false
+$listView.Location = New-Object System.Drawing.Point(12, 12)
+$listView.Size     = New-Object System.Drawing.Size(676, 330)
+[void]$listView.Columns.Add('名称', 130)
+[void]$listView.Columns.Add('接口地址', 240)
+[void]$listView.Columns.Add('Token', 150)
+[void]$listView.Columns.Add('主模型', 150)
+$form.Controls.Add($listView)
 
 $status = New-Object System.Windows.Forms.StatusStrip
 $statusLabel = New-Object System.Windows.Forms.ToolStripStatusLabel
@@ -273,13 +279,13 @@ $btnFolder = New-Btn '打开目录'      358 90
 $btnClose  = New-Btn '关闭'          616 70
 
 function Refresh-List {
-    $list.Items.Clear()
+    $listView.Items.Clear()
     foreach ($p in (Get-Providers)) {
         $item = New-Object System.Windows.Forms.ListViewItem($p.Name)
         [void]$item.SubItems.Add($p.Url)
         [void]$item.SubItems.Add($p.Masked)
         [void]$item.SubItems.Add($p.Model)
-        [void]$list.Items.Add($item)
+        [void]$listView.Items.Add($item)
     }
 }
 
@@ -288,23 +294,30 @@ $btnAdd.Add_Click({
     if ($r) { Save-Provider $r.Name $r.Env | Out-Null; Refresh-List }
 })
 $btnEdit.Add_Click({
-    if ($list.SelectedItems.Count -eq 0) { return }
-    $sel = (Get-Providers) | Where-Object { $_.Name -eq $list.SelectedItems[0].Text }
+    if ($listView.SelectedItems.Count -eq 0) { return }
+    $sel = (Get-Providers) | Where-Object { $_.Name -eq $listView.SelectedItems[0].Text }
     if ($sel) {
         $r = Show-EditDialog $sel
-        if ($r) { Save-Provider $r.Name $r.Env | Out-Null; Refresh-List }
+        if ($r) {
+            # 改名 = 删旧文件，Save-Provider 再按新名写入
+            if ($r.OldName -and $r.OldName -ne $r.Name) {
+                Remove-Item -LiteralPath (Join-Path $providersDir ($r.OldName + '.json')) -Force
+            }
+            Save-Provider $r.Name $r.Env | Out-Null
+            Refresh-List
+        }
     }
 })
-$list.Add_DoubleClick({ $btnEdit.PerformClick() })
+$listView.Add_DoubleClick({ $btnEdit.PerformClick() })
 $btnDel.Add_Click({
-    if ($list.SelectedItems.Count -eq 0) { return }
-    $name = $list.SelectedItems[0].Text
-    $ans = [System.Windows.Forms.MessageBox]::Show("确定删除 $name ？", '确认', 'YesNo', 'Warning')
+    if ($listView.SelectedItems.Count -eq 0) { return }
+    $name = $listView.SelectedItems[0].Text
+    $ans = [System.Windows.Forms.MessageBox]::Show($form, "确定删除 $name ？", '确认', 'YesNo', 'Warning')
     if ($ans -eq 'Yes') { Remove-Item -LiteralPath (Join-Path $providersDir ($name + '.json')) -Force; Refresh-List }
 })
 $btnTest.Add_Click({
-    if ($list.SelectedItems.Count -eq 0) { return }
-    $sel = (Get-Providers) | Where-Object { $_.Name -eq $list.SelectedItems[0].Text }
+    if ($listView.SelectedItems.Count -eq 0) { return }
+    $sel = (Get-Providers) | Where-Object { $_.Name -eq $listView.SelectedItems[0].Text }
     if (-not $sel) { return }
     $statusLabel.Text = "正在测试 $($sel.Name) ..."
     $form.Refresh()
@@ -353,11 +366,11 @@ if (-not (Test-Path -LiteralPath $Directory -PathType Container)) {
 }
 $Directory = (Get-Item -LiteralPath $Directory).FullName
 
-# ---- 扫描 providers ----
+# ---- 扫描 providers（跳过 ".json" 之类的空名文件）----
 $providersDir = Join-Path $env:USERPROFILE '.claude\providers'
 $providers = @()
 if (Test-Path -LiteralPath $providersDir) {
-    $providers = @(Get-ChildItem -LiteralPath $providersDir -Filter '*.json' | Sort-Object Name)
+    $providers = @(Get-ChildItem -LiteralPath $providersDir -Filter '*.json' | Where-Object { $_.BaseName } | Sort-Object Name)
 }
 
 # ---- 弹窗选择 ----
@@ -452,13 +465,104 @@ if ($wt) {
 }
 '@
 
+$usagePs1 = @'
+<#
+cc-usage.ps1 — 供应商限额/余额查询（结果写缓存，供状态栏显示；由状态栏异步调起）
+
+数据源（按 ANTHROPIC_BASE_URL 识别）：
+  GLM 套餐（bigmodel.cn / z.ai）   GET {host}/api/monitor/usage/quota/limit（Authorization 用裸 token，不加 Bearer）
+                                    data.limits[] 里 type=TOKENS_LIMIT 的条目：unit=3 → 5小时窗口，unit=6 → 周窗口
+                                    （percentage = 已用百分比，nextResetTime = 毫秒时间戳）
+  DeepSeek                          GET https://api.deepseek.com/user/balance（账户余额，CNY）
+  官方/其他                         不查询
+
+用法: pwsh -NoProfile -File cc-usage.ps1 [provider 名 ...]    # 缺省刷新全部
+缓存: ~/.claude/cc-usage-cache.json   （格式 { <名>: { fetchedAt, tiers:[{kind,pct,resetMs}] | balance | error } }）
+#>
+param([string[]]$Names)
+
+$ErrorActionPreference = 'SilentlyContinue'
+$providersDir = Join-Path $env:USERPROFILE '.claude\providers'
+$cacheFile    = Join-Path $env:USERPROFILE '.claude\cc-usage-cache.json'
+$now = (Get-Date).ToUniversalTime().ToString('o')
+
+function Get-GlmUsage([string]$ApiHost, [string]$Token) {
+    try {
+        $resp = Invoke-RestMethod -Uri ($ApiHost + '/api/monitor/usage/quota/limit') -Headers @{ Authorization = $Token } -TimeoutSec 15
+        if (-not $resp.success -or -not $resp.data) {
+            return [pscustomobject]@{ fetchedAt = $now; error = "API: $($resp.msg)" }
+        }
+        $items = @()
+        foreach ($lim in @($resp.data.limits)) {
+            # 只解析 TOKENS_LIMIT/CREDIT_LIMIT（5h 与周窗口）；TIME_LIMIT 是附加产品
+            # （搜索/网页阅读等）的月度量，不是模型调用限额，不显示
+            if (@('TOKENS_LIMIT', 'CREDIT_LIMIT') -notcontains [string]$lim.type) { continue }
+            # unit 分类；缺失时兜底：无 nextResetTime 的归 5h（周期耗尽态可能无重置时间），其余归周
+            $kind = $null
+            if ([int]$lim.unit -eq 3) { $kind = 'h5' }
+            elseif ([int]$lim.unit -eq 6) { $kind = 'week' }
+            elseif (-not $lim.nextResetTime) { $kind = 'h5' } else { $kind = 'week' }
+            $items += [pscustomobject]@{ kind = $kind; pct = [int][double]$lim.percentage }
+        }
+        $tiers = @()
+        foreach ($k in 'h5', 'week') {
+            $t = $items | Where-Object { $_.kind -eq $k } | Select-Object -First 1
+            if ($t) { $tiers += $t }
+        }
+        return [pscustomobject]@{ fetchedAt = $now; tiers = $tiers }
+    } catch {
+        return [pscustomobject]@{ fetchedAt = $now; error = [string]$_.Exception.Message }
+    }
+}
+
+# 读旧缓存（保留本次未刷新的条目）
+$cacheMap = @{}
+if (Test-Path -LiteralPath $cacheFile) {
+    try {
+        $old = Get-Content -LiteralPath $cacheFile -Raw | ConvertFrom-Json
+        foreach ($p in $old.PSObject.Properties) { $cacheMap[$p.Name] = $p.Value }
+    } catch {}
+}
+
+foreach ($f in @(Get-ChildItem -LiteralPath $providersDir -Filter '*.json' | Where-Object { $_.BaseName })) {
+    $name = $f.BaseName
+    if ($Names -and $Names -notcontains $name) { continue }
+    try { $envObj = (Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json).env } catch { continue }
+    $token = [string]$envObj.ANTHROPIC_AUTH_TOKEN
+    $url   = [string]$envObj.ANTHROPIC_BASE_URL
+    if (-not $token -or $token -match '在这里填入') { continue }   # 未填 token 的模板
+
+    $entry = $null
+    if ($url -match 'bigmodel\.cn') {
+        $entry = Get-GlmUsage 'https://open.bigmodel.cn' $token
+    } elseif ($url -match 'api\.z\.ai') {
+        $entry = Get-GlmUsage 'https://api.z.ai' $token
+    } elseif ($url -match 'api\.deepseek\.com') {
+        try {
+            $bal = Invoke-RestMethod -Uri 'https://api.deepseek.com/user/balance' -Headers @{ Authorization = 'Bearer ' + $token } -TimeoutSec 15
+            $cny = @($bal.balance_infos) | Where-Object { $_.currency -eq 'CNY' } | Select-Object -First 1
+            $entry = [pscustomobject]@{ fetchedAt = $now; balance = [string]$cny.total_balance }
+        } catch {
+            $entry = [pscustomobject]@{ fetchedAt = $now; error = [string]$_.Exception.Message }
+        }
+    }
+    if ($entry) { $cacheMap[$name] = $entry }
+}
+
+$out = [ordered]@{}
+foreach ($k in ($cacheMap.Keys | Sort-Object)) { $out[$k] = $cacheMap[$k] }
+[IO.File]::WriteAllText($cacheFile, ($out | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
+'@
+
 $statuslinePs1 = @'
 # cc-statusline.ps1 — Claude Code 状态栏
 # 显示：[供应商账号] 模型 · 目录 · 上下文用量%
 # 识别原理：用当前进程 env 里的 ANTHROPIC_AUTH_TOKEN 匹配 ~/.claude/providers/*.json，
 # 匹配不到时按 ANTHROPIC_BASE_URL 判断（空 = 官方）。default 启动同样能识别。
 
-$data = [Console]::In.ReadToEnd() | ConvertFrom-Json
+# 编码统一 UTF-8：Claude Code 按 UTF-8 读写本进程的 stdin/stdout，
+# pwsh 默认跟随系统代码页（GBK），中文目录名与 "·" 分隔符会变乱码
+$data = (New-Object IO.StreamReader([Console]::OpenStandardInput(), [Text.UTF8Encoding]::new($false))).ReadToEnd() | ConvertFrom-Json
 
 $model   = if ($data.model.display_name) { $data.model.display_name } else { '?' }
 $dirName = Split-Path -Leaf ($data.workspace.current_dir)
@@ -496,8 +600,67 @@ $provColor = if ($prov -eq 'official') { Ansi '#2ECC71' }
              elseif ($prov -like 'deepseek*') { Ansi '#4D6FFF' }
              else { Ansi '#F1C40F' }
 $pctColor = if ($pct -ge 80) { Ansi '#E74C3C' } elseif ($pct -ge 50) { Ansi '#F1C40F' } else { Ansi '#2ECC71' }
+function PctColor([int]$v) { if ($v -ge 80) { Ansi '#E74C3C' } elseif ($v -ge 50) { Ansi '#F1C40F' } else { Ansi '#2ECC71' } }
 
-[Console]::Out.Write("$provColor[$prov]$cEnd $model · $dirName · ctx $pctColor$pct%$cEnd")
+# ---- 限额/余额 ----
+# 官方订阅：stdin 的 rate_limits 直接可用（Pro/Max 才有；API key 供应商无此字段）
+# GLM/DeepSeek：读 cc-usage.ps1 写的缓存；超过 10 分钟异步刷新（不阻塞状态栏），本次先用旧值
+function Update-UsageAsync([string]$Prov) {
+    # 防抖：2 分钟内已触发过就不再起进程
+    $lockFile = Join-Path $env:USERPROFILE '.claude\cc-usage.last'
+    $last = [datetime]::MinValue
+    if (Test-Path -LiteralPath $lockFile) { try { $last = [datetime](Get-Content -LiteralPath $lockFile -Raw) } catch {} }
+    if (((Get-Date) - $last).TotalSeconds -lt 120) { return }
+    try { [IO.File]::WriteAllText($lockFile, (Get-Date).ToString('o')) } catch {}
+    Start-Process -WindowStyle Hidden pwsh -ArgumentList '-NoProfile', '-File', (Join-Path $env:USERPROFILE '.claude\cc-usage.ps1'), $Prov
+}
+
+$usageSeg = ''
+if ($data.rate_limits) {
+    $rl = $data.rate_limits
+    if ($null -ne $rl.five_hour.used_percentage)  { $p = [int]$rl.five_hour.used_percentage;  $usageSeg += " · 5h $(PctColor $p)$p%$cEnd" }
+    if ($null -ne $rl.seven_day.used_percentage) { $p = [int]$rl.seven_day.used_percentage; $usageSeg += " · 周 $(PctColor $p)$p%$cEnd" }
+} elseif ($prov -ne 'official') {
+    $cacheFile = Join-Path $env:USERPROFILE '.claude\cc-usage-cache.json'
+    $ue = $null
+    if (Test-Path -LiteralPath $cacheFile) {
+        try { $ue = (Get-Content -LiteralPath $cacheFile -Raw | ConvertFrom-Json).($prov) } catch {}
+    }
+    if ($ue -and -not $ue.error) {
+        if (((Get-Date) - [datetime]$ue.fetchedAt).TotalMinutes -gt 10) { Update-UsageAsync $prov }
+        foreach ($t in @($ue.tiers)) {
+            $p = [int]$t.pct
+            if ($t.kind -eq 'h5')   { $usageSeg += " · 5h $(PctColor $p)$p%$cEnd" }
+            if ($t.kind -eq 'week') { $usageSeg += " · 周 $(PctColor $p)$p%$cEnd" }
+        }
+        if ($ue.balance) { $usageSeg += " · ¥$($ue.balance)" }
+    } elseif (-not $ue) {
+        Update-UsageAsync $prov   # 首次：先触发查询，下一轮状态栏就有数据
+    }
+}
+
+# ---- 布局：ctx 留在左侧，限额推到行右端（免得两类百分比混在一起）----
+# Claude Code 会传 COLUMNS 环境变量；按可见宽度填充（ANSI 色码计 0 列，CJK 计 2 列）
+function Get-VisibleWidth([string]$s) {
+    $w = 0
+    foreach ($ch in ($s -replace "$esc\[[0-9;]*m", '').ToCharArray()) {
+        if ([int]$ch -ge 0x2E80) { $w += 2 } else { $w += 1 }
+    }
+    return $w
+}
+
+$left  = "$provColor[$prov]$cEnd $model · $dirName · ctx $pctColor$pct%$cEnd"
+$right = $usageSeg.TrimStart(' ·')
+$out = if ($right) { "$left  $right" } else { $left }
+$cols = 0
+if ("" + $env:COLUMNS -match '^\d+$') { $cols = [int]$env:COLUMNS }
+if ($right -and $cols -ge 60) {
+    $pad = $cols - (Get-VisibleWidth $left) - (Get-VisibleWidth $right) - 1
+    if ($pad -ge 2) { $out = $left + (' ' * $pad) + $right }
+}
+
+try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new() } catch {}
+[Console]::Out.Write($out)
 '@
 
 $bashCc = @'
@@ -526,7 +689,7 @@ cc() {
 
   local -a files=()
   for f in "$pdir"/*.json; do
-    [ -e "$f" ] && files+=("$f")
+    [ -e "$f" ] && [ "$(basename "$f" .json)" ] && files+=("$f")
   done
   if [ ${#files[@]} -eq 0 ]; then
     echo "cc: 未找到 $pdir/*.json" >&2
@@ -576,7 +739,7 @@ function cc {
         return
     }
 
-    $files = @(Get-ChildItem -LiteralPath $providersDir -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name)
+    $files = @(Get-ChildItem -LiteralPath $providersDir -Filter '*.json' -ErrorAction SilentlyContinue | Where-Object { $_.BaseName } | Sort-Object Name)
     if ($files.Count -eq 0) { Write-Error "未找到 $providersDir\*.json"; return }
 
     Write-Host '选择要使用的模型配置:' -ForegroundColor Cyan
@@ -653,7 +816,8 @@ New-Item -ItemType Directory -Force -Path $claudeDir, $providersDir | Out-Null
 Write-U8Bom (Join-Path $claudeDir 'cc-launch.ps1')     $launchPs1
 Write-U8Bom (Join-Path $claudeDir 'cc-statusline.ps1') $statuslinePs1
 Write-U8Bom (Join-Path $claudeDir 'cc-manager.ps1')    $managerPs1
-Write-Host '[1/6] cc-launch.ps1 / cc-statusline.ps1 / cc-manager.ps1 已写入'
+Write-U8Bom (Join-Path $claudeDir 'cc-usage.ps1')      $usagePs1
+Write-Host '[1/6] cc-launch.ps1 / cc-statusline.ps1 / cc-manager.ps1 / cc-usage.ps1 已写入'
 
 # 2. providers 模板（已存在的不覆盖）
 foreach ($pair in @(@('official.json', $officialJson), @('glm.json', $glmJson))) {

@@ -11,7 +11,8 @@ Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的
 | `cc` 命令 | 终端内菜单选供应商启动；熟练后 `cc glm`、`cc deepseek-work` 直达 |
 | 资源管理器右键 | 任意目录右键 →「Claude Code（选模型）」→ 弹窗选择 → 新终端窗口在该目录启动 |
 | `ccm` 管理器 | GUI 增删改供应商配置；GLM / DeepSeek / 官方一键预设；连通测试（发最小请求回报 HTTP 状态） |
-| 状态栏 | 常驻显示 `[账号] 模型 · 目录 · 上下文%`，用 token 反查配置文件识别账号——连裸 `claude` 都能识别当前用的哪个号 |
+| 状态栏 | 常驻显示 `[账号] 模型 · 目录 · 上下文% · 5h% · 周%`，用 token 反查配置文件识别账号——连裸 `claude` 都能识别当前用的哪个号 |
+| 限额显示 | 官方订阅读 Claude Code 自带的 rate_limits（免费实时）；GLM（5h/周）与 DeepSeek（余额）由 `cc-usage.ps1` 后台查询缓存，状态栏只读缓存、过期才异步刷新，不阻塞 |
 | tab 颜色 | 按厂商归组着色，与状态栏同色：GLM 系青 / DeepSeek 系蓝 / 官方绿 / 其他黄 |
 
 支持 Git Bash 和 PowerShell 7 的 `cc` / `ccm` 命令。
@@ -32,7 +33,7 @@ cc            # 菜单选择
 cc glm        # 直达某个配置
 ```
 
-安装包会部署：`~/.claude/cc-launch.ps1`（启动器）、`cc-manager.ps1`（管理器）、`cc-statusline.ps1`（状态栏）、`providers/*.json`（配置模板）、右键菜单注册、`cc`/`ccm` 命令、settings.json 的 `statusLine`。
+安装包会部署：`~/.claude/cc-launch.ps1`（启动器）、`cc-manager.ps1`（管理器）、`cc-statusline.ps1`（状态栏）、`cc-usage.ps1`（限额/余额查询）、`providers/*.json`（配置模板）、右键菜单注册、`cc`/`ccm` 命令、settings.json 的 `statusLine`。
 
 ## 工作原理
 
@@ -69,7 +70,7 @@ token 不打进安装包，模板只有占位符。
 # 右键菜单
 Remove-Item 'HKCU:\Software\Classes\Directory\shell\ClaudePicker','HKCU:\Software\Classes\Directory\Background\shell\ClaudePicker' -Recurse
 # 脚本与配置
-Remove-Item ~\.claude\cc-launch.ps1, ~\.claude\cc-manager.ps1, ~\.claude\cc-statusline.ps1, ~\.claude\providers -Recurse
+Remove-Item ~\.claude\cc-launch.ps1, ~\.claude\cc-manager.ps1, ~\.claude\cc-statusline.ps1, ~\.claude\cc-usage.ps1, ~\.claude\cc-usage-cache.json, ~\.claude\cc-usage.last, ~\.claude\providers -Recurse
 # settings.json 里删掉 statusLine 键；bashrc / pwsh profile 里删除 ">>> cc 多供应商启动器 >>>" 标记块
 ```
 
@@ -77,6 +78,7 @@ Remove-Item ~\.claude\cc-launch.ps1, ~\.claude\cc-manager.ps1, ~\.claude\cc-stat
 
 - **状态栏消失了？** 装了 cc-switch 的话见上节——把 `statusLine` 段加进它的通用配置。
 - **状态栏的账号名怎么来的？** 启动时用进程环境里的 `ANTHROPIC_AUTH_TOKEN` 逐一比对 `providers/*.json`，匹配即显示文件名；匹配不到则按 `ANTHROPIC_BASE_URL` 的主机名显示，两者皆空显示 `official`。
+- **状态栏的限额（5h/周）哪来的？** 官方订阅：Claude Code 传给状态栏的 JSON 自带 `rate_limits`（5 小时 + 7 天窗口），直接显示。GLM：`cc-usage.ps1` 调智谱限额接口把结果缓存到 `~/.claude/cc-usage-cache.json`，状态栏读缓存显示，超过 10 分钟触发后台异步刷新（2 分钟防抖）——状态栏本身从不发网络请求，不会拖慢刷新。DeepSeek 显示账户余额（¥）。智谱接口另返回的 TIME_LIMIT 是附加产品（搜索/网页阅读等）的月度量，与模型调用限额无关，不显示；各账号有几档显示几档。
 - **在盘符根目录右键报“目录不存在”？** 旧版本问题（`"C:\"` 的 `\"` 被解析成转义引号），已修复。
 
 ## License
