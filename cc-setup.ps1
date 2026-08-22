@@ -642,9 +642,11 @@ if ($data.rate_limits) {
 # ---- 布局：ctx 留在左侧，限额推到行右端（免得两类百分比混在一起）----
 # Claude Code 会传 COLUMNS 环境变量；按可见宽度填充（ANSI 色码计 0 列，CJK 计 2 列）
 function Get-VisibleWidth([string]$s) {
+    # ·(U+00B7) 在中文字体下常按全角渲染，保守计 2 列——宁可右边多留空隙也不能溢出截断
     $w = 0
     foreach ($ch in ($s -replace "$esc\[[0-9;]*m", '').ToCharArray()) {
-        if ([int]$ch -ge 0x2E80) { $w += 2 } else { $w += 1 }
+        $c = [int]$ch
+        if ($c -ge 0x2E80 -or $c -eq 0xB7) { $w += 2 } else { $w += 1 }
     }
     return $w
 }
@@ -655,7 +657,7 @@ $out = if ($right) { "$left  $right" } else { $left }
 $cols = 0
 if ("" + $env:COLUMNS -match '^\d+$') { $cols = [int]$env:COLUMNS }
 if ($right -and $cols -ge 60) {
-    $pad = $cols - (Get-VisibleWidth $left) - (Get-VisibleWidth $right) - 1
+    $pad = $cols - (Get-VisibleWidth $left) - (Get-VisibleWidth $right) - 2
     if ($pad -ge 2) { $out = $left + (' ' * $pad) + $right }
 }
 
