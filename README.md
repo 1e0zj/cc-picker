@@ -13,7 +13,7 @@ Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的
 | `ccm` 管理器 | GUI 增删改供应商配置；GLM / DeepSeek / 官方一键预设；连通测试（发最小请求回报 HTTP 状态） |
 | 状态栏 | 常驻显示 `[账号] 模型 · 目录 · 上下文% · 5h% · 周%`，用 token 反查配置文件识别账号——连裸 `claude` 都能识别当前用的哪个号 |
 | 限额显示 | 官方订阅读 Claude Code 自带的 rate_limits（免费实时）；GLM（5h/周）与 DeepSeek（余额）由 `cc-usage.ps1` 后台查询缓存，状态栏只读缓存、过期才异步刷新，不阻塞 |
-| tab 颜色 | 按厂商归组着色，与状态栏同色：GLM 系青 / DeepSeek 系蓝 / 官方绿 / 其他黄 |
+| tab 颜色 | 按厂商归组着色，与状态栏同色：GLM 系青 / DeepSeek 系蓝 / 官方绿 / 其他黄；标题启动后由 Claude Code 接管（会话/任务状态，可用 `/rename` 命名） |
 
 支持 Git Bash 和 PowerShell 7 的 `cc` / `ccm` 命令。
 

@@ -443,6 +443,7 @@ if ($choice -ne 'default') {
 }
 
 # ---- 拼命令行并启动（新 tab 用 pwsh，路径用单引号避免引号转义问题）----
+# 标题只在启动瞬间生效：claude 启动后会接管标题（显示会话/任务状态），不去覆盖它
 if ($settingsFile) {
     $inner = "& '{0}' --settings '{1}'" -f $claude, $settingsFile
     $title = 'claude [{0}]' -f $choice
