@@ -113,7 +113,150 @@ if ($List) {
     exit 0
 }
 
-# ---------- 编辑/新增对话框 ----------
+# ---------- Win32 与主题（cc-switch 风格：浅色卡片 / 跟随系统深浅色） ----------
+
+# DPI 感知（PerMonitorV2）：必须建窗口前声明，否则高分屏上整个窗口按位图拉伸发虚
+try {
+    Add-Type -Namespace CcUi -Name Native -MemberDefinition @"
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool SetProcessDpiAwarenessContext(int value);
+[System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, string lParam);
+"@
+    [void][CcUi.Native]::SetProcessDpiAwarenessContext(-4)
+} catch {}
+
+$light = $true
+try {
+    if ((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -ErrorAction Stop).AppsUseLightTheme -eq 0) { $light = $false }
+} catch {}
+$theme = if ($light) {
+    @{ bg = '#F3F4F6'; card = '#FFFFFF'; border = '#E3E5EA'; text = '#1F2328'; sub = '#71767F'
+       inputBg = '#FFFFFF'; inputBorder = '#D9DDE3'; chipBg = '#ECEEF2'; chipHover = '#E0E3E9'
+       accent = '#3B82F6'; accentHover = '#2F76E4'; onAccent = '#FFFFFF'
+       orange = '#F97316'; orangeHover = '#EA580C'
+       green = '#10B981'; red = '#EF4444'; redHover = '#DC2626' }
+} else {
+    @{ bg = '#1D1E22'; card = '#26282E'; border = '#3A3D45'; text = '#E6E8EC'; sub = '#9CA3AF'
+       inputBg = '#17181C'; inputBorder = '#4A4E59'; chipBg = '#33353D'; chipHover = '#3E414A'
+       accent = '#4C8DFF'; accentHover = '#6AA1FF'; onAccent = '#0B1220'
+       orange = '#FB923C'; orangeHover = '#FDBA74'
+       green = '#34D399'; red = '#F87171'; redHover = '#FCA5A5' }
+}
+
+function Get-Clr([string]$Hex) { [System.Drawing.ColorTranslator]::FromHtml($Hex) }
+function Get-RoundPath([float]$X, [float]$Y, [float]$W, [float]$H, [int]$R) {
+    $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $d = 2 * $R
+    $p.AddArc($X, $Y, $d, $d, 180, 90)
+    $p.AddArc($X + $W - $d, $Y, $d, $d, 270, 90)
+    $p.AddArc($X + $W - $d, $Y + $H - $d, $d, $d, 0, 90)
+    $p.AddArc($X, $Y + $H - $d, $d, $d, 90, 90)
+    $p.CloseFigure()
+    return $p
+}
+function Set-RoundRegion($Ctl, [int]$R) {
+    $Ctl.Region = New-Object System.Drawing.Region (Get-RoundPath 0 0 $Ctl.Width $Ctl.Height $R)
+}
+function Enable-DarkTitleBar($Win) {
+    if ($light) { return }
+    $v = 1
+    if ([CcUi.Native]::DwmSetWindowAttribute($Win.Handle, 20, [ref]$v, 4) -ne 0) {
+        [void][CcUi.Native]::DwmSetWindowAttribute($Win.Handle, 19, [ref]$v, 4)
+    }
+}
+
+$uiFont      = New-Object System.Drawing.Font('Segoe UI', 9.5)
+$uiFontSub   = New-Object System.Drawing.Font('Segoe UI', 9)
+$uiFontTitle = New-Object System.Drawing.Font('Segoe UI Semibold', 12)
+$uiFontCard  = New-Object System.Drawing.Font('Segoe UI Semibold', 10.5)
+$uiFontInput = New-Object System.Drawing.Font('Segoe UI', 10.5)
+
+# 高分屏：手工窗体不会自动按 DPI 缩放，所有像素常量按 96dpi 基准书写、经 Px() 放大
+# （字体用 Point 单位会自行跟随 DPI，不用缩）。不用 Control.Scale()：其与模态对话框
+# 组合时会把窗口压回 96dpi 基准，行为不可控。
+$script:uiScale = 1.0
+try {
+    $g0 = [System.Drawing.Graphics]::FromHwnd([IntPtr]::Zero)
+    $script:uiScale = [double]::Round($g0.DpiX / 96, 3)
+    $g0.Dispose()
+} catch {}
+function Px([int]$V) { [int][Math]::Round($V * $script:uiScale) }
+
+function New-FlatButton([string]$Text, [int]$W, [int]$H, [string]$Kind = 'ghost') {
+    $b = New-Object System.Windows.Forms.Button
+    $b.Text = $Text
+    $b.Size = New-Object System.Drawing.Size((Px $W), (Px $H))
+    $b.FlatStyle = 'Flat'
+    $b.FlatAppearance.BorderSize = 0
+    $b.Cursor = 'Hand'
+    $b.TabStop = $false
+    switch ($Kind) {
+        'orange' {
+            $b.BackColor = Get-Clr $theme.orange
+            $b.ForeColor = [System.Drawing.Color]::White
+            $b.FlatAppearance.MouseOverBackColor = Get-Clr $theme.orangeHover
+        }
+        'primary' {
+            $b.BackColor = Get-Clr $theme.accent
+            $b.ForeColor = Get-Clr $theme.onAccent
+            $b.FlatAppearance.MouseOverBackColor = Get-Clr $theme.accentHover
+        }
+        'danger' {
+            $b.BackColor = Get-Clr $theme.chipBg
+            $b.ForeColor = Get-Clr $theme.sub
+            $b.FlatAppearance.MouseOverBackColor = Get-Clr $theme.redHover
+        }
+        default {
+            $b.BackColor = Get-Clr $theme.chipBg
+            $b.ForeColor = Get-Clr $theme.text
+            $b.FlatAppearance.MouseOverBackColor = Get-Clr $theme.chipHover
+        }
+    }
+    # 圆角随控件尺寸重算（DPI 缩放后 Region 不会自己跟着变）
+    $b.Add_Resize({ Set-RoundRegion $this 6 })
+    Set-RoundRegion $b 6
+    return $b
+}
+
+# 输入框：自绘圆角容器（白底 + 描边，聚焦变主题蓝），内嵌无边框 TextBox。
+# TextBox 高度取 PreferredHeight（正好一行文字、descender 完整），在格子里垂直居中——
+# Dock Fill 会让文字偏上且裁下伸字母（g/y/p）。容器只用于绝对布局，勿入 TableLayoutPanel。
+function New-Input([int]$H = 44) {
+    $boxHost = New-Object System.Windows.Forms.Panel
+    $st = @{ focus = $false }
+    $tb = New-Object System.Windows.Forms.TextBox
+    $tb.BorderStyle = 'None'
+    $tb.Font = $uiFontInput
+    $tb.BackColor = Get-Clr $theme.inputBg
+    $tb.ForeColor = Get-Clr $theme.text
+    $boxHost.Controls.Add($tb)
+    # 文字自适应行高、格子内垂直居中；容器尺寸由调用方 SetBounds 定，之后随 Resize 重排
+    $layoutTb = {
+        $tb.SetBounds((Px 12), [int](($boxHost.Height - $tb.PreferredHeight) / 2), [Math]::Max(10, $boxHost.Width - (Px 24)), $tb.PreferredHeight)
+    }.GetNewClosure()
+    $boxHost.Add_Resize({ & $layoutTb }.GetNewClosure())
+    & $layoutTb
+    $boxHost.Cursor = 'IBeam'
+    # 点格子的任意位置都聚焦输入框——否则点边缘没反应，像不可编辑
+    $boxHost.Add_MouseDown({ $tb.Focus() }.GetNewClosure())
+    $boxHost.Add_Paint({
+        param($s, $e)
+        $e.Graphics.SmoothingMode = 'AntiAlias'
+        $path = Get-RoundPath 0 0 ($s.Width - 1) ($s.Height - 1) 8
+        $e.Graphics.FillPath((New-Object System.Drawing.SolidBrush (Get-Clr $theme.inputBg)), $path)
+        $edge = if ($st.focus) { $theme.accent } else { $theme.inputBorder }
+        $e.Graphics.DrawPath((New-Object System.Drawing.Pen (Get-Clr $edge)), $path)
+        $path.Dispose()
+    }.GetNewClosure())
+    $tb.Add_Enter({ $st.focus = $true; $boxHost.Invalidate() }.GetNewClosure())
+    $tb.Add_Leave({ $st.focus = $false; $boxHost.Invalidate() }.GetNewClosure())
+    return @{ Host = $boxHost; Box = $tb }
+}
+
+# ---------- 编辑/新增对话框（绝对布局：不参与 TLP 自动布局协商，尺寸完全可控） ----------
 
 function Show-EditDialog($existing) {
     $isNew = $null -eq $existing
@@ -122,66 +265,110 @@ function Show-EditDialog($existing) {
     $dlg.FormBorderStyle = 'FixedDialog'
     $dlg.MaximizeBox     = $false
     $dlg.StartPosition   = 'CenterParent'
-    $dlg.ClientSize      = New-Object System.Drawing.Size(470, 470)
-    # 主窗口是 TopMost，编辑框不置顶、不挂 owner 会被挡在主窗口后面
-    $dlg.TopMost         = $true
+    $dlg.ClientSize      = New-Object System.Drawing.Size((Px 540), (Px 682))
+    $dlg.TopMost         = $true   # 主窗口 TopMost，编辑框不置顶会被挡在主窗口后面
+    # AutoScaleMode 必须显式 None：顶级 Form 默认按字体自动缩放，显示时会把窗口压回 96dpi 基准
+    $dlg.AutoScaleMode   = [System.Windows.Forms.AutoScaleMode]::None
+    $dlg.Font            = $uiFont
+    $dlg.BackColor       = Get-Clr $theme.bg
 
-    function Add-Label([string]$text, [int]$x, [int]$y) {
+    function Add-Label([string]$Text, [int]$X, [int]$Y, [bool]$Sub = $true) {
         $l = New-Object System.Windows.Forms.Label
-        $l.Text = $text; $l.Location = New-Object System.Drawing.Point($x, $y); $l.AutoSize = $true
-        $dlg.Controls.Add($l); return $l
+        $l.Text = $Text
+        $l.Location = New-Object System.Drawing.Point((Px $X), (Px $Y))
+        $l.AutoSize = $true
+        $l.BackColor = 'Transparent'
+        if ($Sub) { $l.Font = $uiFontSub; $l.ForeColor = Get-Clr $theme.sub }
+        [void]$dlg.Controls.Add($l)
+        return $l
     }
-    function Add-Box([int]$x, [int]$y, [int]$w, [bool]$secret = $false) {
-        $t = New-Object System.Windows.Forms.TextBox
-        $t.Location = New-Object System.Drawing.Point($x, $y); $t.Size = New-Object System.Drawing.Size($w, 23)
-        $dlg.Controls.Add($t); return $t
+
+    $script:cueList = @()   # (TextBox, 提示文字) 对，窗口 Shown 句柄就绪后再设占位符
+    function Add-Input([int]$X, [int]$Y, [int]$W, [int]$H, [string]$Hint) {
+        $inp = New-Input $H
+        $inp.Host.SetBounds((Px $X), (Px $Y), (Px $W), (Px $H))
+        [void]$dlg.Controls.Add($inp.Host)
+        $script:cueList += , @($inp.Box, $Hint)
+        return $inp.Box
     }
 
-    Add-Label '名称（英文，作为菜单/命令里的标识）' 14 14   | Out-Null
-    $tbName = Add-Box 14 34 200
-    if (-not $isNew) { $tbName.Text = $existing.Name }   # 预填现名，允许改名（保存时重命名文件）
-
-    Add-Label '接口地址 ANTHROPIC_BASE_URL（官方留空）' 14 66 | Out-Null
-    $tbUrl = Add-Box 14 86 440
-
-    $presetOfficial = New-Object System.Windows.Forms.Button
-    $presetOfficial.Text = '官方'; $presetOfficial.Location = New-Object System.Drawing.Point(14, 112); $presetOfficial.Size = New-Object System.Drawing.Size(60, 24)
-    $presetGlm = New-Object System.Windows.Forms.Button
-    $presetGlm.Text = 'GLM 预设'; $presetGlm.Location = New-Object System.Drawing.Point(80, 112); $presetGlm.Size = New-Object System.Drawing.Size(80, 24)
-    $presetDs = New-Object System.Windows.Forms.Button
-    $presetDs.Text = 'DeepSeek 预设'; $presetDs.Location = New-Object System.Drawing.Point(166, 112); $presetDs.Size = New-Object System.Drawing.Size(100, 24)
+    # 标题 + 快速预设
+    $lblTitle = Add-Label $(if ($isNew) { '新增供应商' } else { '编辑供应商' }) 24 18 $false
+    $lblTitle.Font = $uiFontTitle
+    $lblTitle.ForeColor = Get-Clr $theme.text
+    [void](Add-Label '快速预设：' 24 62)
+    $presetOfficial = New-FlatButton '官方' 68 32
+    $presetOfficial.Location = New-Object System.Drawing.Point((Px 94), (Px 56))
+    $presetGlm = New-FlatButton 'GLM' 74 32
+    $presetGlm.Location = New-Object System.Drawing.Point((Px 168), (Px 56))
+    $presetDs = New-FlatButton 'DeepSeek' 92 32
+    $presetDs.Location = New-Object System.Drawing.Point((Px 248), (Px 56))
     $dlg.Controls.AddRange(@($presetOfficial, $presetGlm, $presetDs))
 
-    Add-Label 'Token（ANTHROPIC_AUTH_TOKEN）' 14 146 | Out-Null
-    $tbToken = Add-Box 14 166 440
-
-    Add-Label '主模型 ANTHROPIC_MODEL' 14 198 | Out-Null
-    $tbModel = Add-Box 14 218 440
-
-    $grp = New-Object System.Windows.Forms.GroupBox
-    $grp.Text = '高级：档位映射与超时（可留空）'; $grp.Location = New-Object System.Drawing.Point(14, 248); $grp.Size = New-Object System.Drawing.Size(440, 140)
-    $dlg.Controls.Add($grp)
-
-    function Add-Grp([string]$text, [int]$x, [int]$y) {
-        $l = New-Object System.Windows.Forms.Label
-        $l.Text = $text; $l.Location = New-Object System.Drawing.Point($x, $y); $l.AutoSize = $true
-        $grp.Controls.Add($l); return $l
+    # 主字段（标签上、输入框下；行距 78，输入框高 44 带内边距）
+    $tbName = $null; $tbUrl = $null; $tbToken = $null; $tbModel = $null
+    foreach ($f in @(
+        , @('名称',    '英文/数字/-/_，如 glm',       104, [ref]$tbName)
+        , @('接口地址', 'https://…（官方留空）',        182, [ref]$tbUrl)
+        , @('Token',   'ANTHROPIC_AUTH_TOKEN（sk-…）', 260, [ref]$tbToken)
+        , @('主模型',  '如 glm-5.3[1M]',               338, [ref]$tbModel)
+    )) {
+        [void](Add-Label $f[0] 24 ($f[2] - 22))
+        $f[3].Value = Add-Input 24 $f[2] 492 44 $f[1]
     }
-    $tbHaiku = $null; $tbOpus = $null; $tbSonnet = $null; $tbTimeout = $null
-    Add-Grp 'HAIKU 映射'    10 24  | Out-Null; $tbHaiku   = New-Object System.Windows.Forms.TextBox; $tbHaiku.Location   = New-Object System.Drawing.Point(110, 20);  $tbHaiku.Size   = New-Object System.Drawing.Size(300, 23)
-    Add-Grp 'OPUS 映射'     10 56  | Out-Null; $tbOpus    = New-Object System.Windows.Forms.TextBox; $tbOpus.Location    = New-Object System.Drawing.Point(110, 52);  $tbOpus.Size    = New-Object System.Drawing.Size(300, 23)
-    Add-Grp 'SONNET 映射'   10 88  | Out-Null; $tbSonnet  = New-Object System.Windows.Forms.TextBox; $tbSonnet.Location  = New-Object System.Drawing.Point(110, 84);  $tbSonnet.Size  = New-Object System.Drawing.Size(300, 23)
-    Add-Grp 'API_TIMEOUT_MS' 10 120 | Out-Null; $tbTimeout = New-Object System.Windows.Forms.TextBox; $tbTimeout.Location = New-Object System.Drawing.Point(110, 116); $tbTimeout.Size = New-Object System.Drawing.Size(120, 23)
-    $grp.Controls.AddRange(@($tbHaiku, $tbOpus, $tbSonnet, $tbTimeout))
 
-    $btnOk = New-Object System.Windows.Forms.Button
-    $btnOk.Text = '保存'; $btnOk.Location = New-Object System.Drawing.Point(280, 420); $btnOk.Size = New-Object System.Drawing.Size(80, 30)
-    $btnOk.DialogResult = 'OK'
-    $btnCancel = New-Object System.Windows.Forms.Button
-    $btnCancel.Text = '取消'; $btnCancel.Location = New-Object System.Drawing.Point(370, 420); $btnCancel.Size = New-Object System.Drawing.Size(80, 30)
+    # 高级：浅灰圆角卡片内 2×2
+    $adv = New-Object System.Windows.Forms.Panel
+    $adv.SetBounds((Px 24), (Px 432), (Px 492), (Px 176))
+    $adv.BackColor = 'Transparent'
+    $adv.Add_Paint({
+        param($s, $e)
+        $e.Graphics.SmoothingMode = 'AntiAlias'
+        $path = Get-RoundPath 0 0 ($s.Width - 1) ($s.Height - 1) 10
+        $e.Graphics.FillPath((New-Object System.Drawing.SolidBrush (Get-Clr $theme.chipBg)), $path)
+        $path.Dispose()
+    })
+    [void]$dlg.Controls.Add($adv)
+    $lblAdv = New-Object System.Windows.Forms.Label
+    $lblAdv.Text = '高级 — 档位映射与超时（可留空）'
+    $lblAdv.Font = $uiFontSub
+    $lblAdv.ForeColor = Get-Clr $theme.sub
+    $lblAdv.BackColor = 'Transparent'
+    $lblAdv.Location = New-Object System.Drawing.Point((Px 14), (Px 12))
+    $lblAdv.AutoSize = $true
+    [void]$adv.Controls.Add($lblAdv)
+
+    $tbHaiku = $null; $tbOpus = $null; $tbSonnet = $null; $tbTimeout = $null
+    foreach ($f in @(
+        , @('HAIKU 映射',     14,  40, [ref]$tbHaiku)
+        , @('OPUS 映射',      258, 40, [ref]$tbOpus)
+        , @('SONNET 映射',    14,  116, [ref]$tbSonnet)
+        , @('API_TIMEOUT_MS', 258, 116, [ref]$tbTimeout)
+    )) {
+        $lb = New-Object System.Windows.Forms.Label
+        $lb.Text = $f[0]
+        $lb.Font = $uiFontSub
+        $lb.ForeColor = Get-Clr $theme.sub
+        $lb.BackColor = 'Transparent'
+        $lb.Location = New-Object System.Drawing.Point((Px $f[1]), (Px $f[2]))
+        $lb.AutoSize = $true
+        [void]$adv.Controls.Add($lb)
+        $inp = New-Input 38
+        $inp.Host.SetBounds((Px $f[1]), (Px ($f[2] + 20)), (Px 220), (Px 38))
+        [void]$adv.Controls.Add($inp.Host)
+        $f[3].Value = $inp.Box
+    }
+
+    # 底部按钮（右对齐：取消次级、保存主色）
+    $btnCancel = New-FlatButton '取消' 96 34
+    $btnCancel.Location = New-Object System.Drawing.Point((Px 316), (Px 632))
     $btnCancel.DialogResult = 'Cancel'
-    $dlg.Controls.AddRange(@($btnOk, $btnCancel))
-    $dlg.AcceptButton = $btnOk; $dlg.CancelButton = $btnCancel
+    $btnOk = New-FlatButton '保存' 96 34 'primary'
+    $btnOk.Location = New-Object System.Drawing.Point((Px 420), (Px 632))
+    $btnOk.DialogResult = 'OK'
+    $dlg.Controls.AddRange(@($btnCancel, $btnOk))
+    $dlg.AcceptButton = $btnOk
+    $dlg.CancelButton = $btnCancel
 
     # 预设
     $presetOfficial.Add_Click({
@@ -203,6 +390,7 @@ function Show-EditDialog($existing) {
     $script:rawEnv = @{}
     if (-not $isNew -and $existing.Env) {
         foreach ($prop in $existing.Env.PSObject.Properties) { $script:rawEnv[$prop.Name] = [string]$prop.Value }
+        $tbName.Text    = $existing.Name
         $tbUrl.Text     = [string]$existing.Env.ANTHROPIC_BASE_URL
         $tbToken.Text   = [string]$existing.Env.ANTHROPIC_AUTH_TOKEN
         $tbModel.Text   = [string]$existing.Env.ANTHROPIC_MODEL
@@ -211,6 +399,14 @@ function Show-EditDialog($existing) {
         $tbSonnet.Text  = [string]$existing.Env.ANTHROPIC_DEFAULT_SONNET_MODEL
         $tbTimeout.Text = [string]$existing.Env.API_TIMEOUT_MS
     }
+
+    $dlg.Add_Shown({
+        Enable-DarkTitleBar $dlg
+        # EM_SETCUEBANNER：wParam=1 聚焦时也显示占位提示（注意 [IntPtr]1 不能写成 [IntPtr]::1）
+        foreach ($pair in $script:cueList) {
+            if ($pair[1]) { [void][CcUi.Native]::SendMessage($pair[0].Handle, 0x1501, [IntPtr]1, $pair[1]) }
+        }
+    })
 
     if ($dlg.ShowDialog($form) -ne [System.Windows.Forms.DialogResult]::OK) { return $null }
 
@@ -242,60 +438,115 @@ function Show-EditDialog($existing) {
 
 # ---------- 主窗口 ----------
 
-$form = New-Object System.Windows.Forms.Form
-$form.Text          = 'Claude Code 供应商管理'
-$form.StartPosition = 'CenterScreen'
-$form.ClientSize    = New-Object System.Drawing.Size(700, 420)
-$form.TopMost       = $true
+function New-ProviderCard($p) {
+    $card = New-Object System.Windows.Forms.Panel
+    $card.Width = Px 640   # 基准宽度：右缘锚定的按钮/徽标按它定位，入列后再拉伸到列表宽
+    $card.Height = Px 88
+    $card.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, (Px 16))
+    $card.Cursor = 'Hand'
+    $card.BackColor = Get-Clr $theme.bg
 
-# 注意：变量名不能用 $list——与顶部 param([switch]$List) 同名（PS 变量名不区分大小写），
-# 会被当作 switch 参数赋值而报 SwitchParameter 转换错误
-$listView = New-Object System.Windows.Forms.ListView
-$listView.View = 'Details'; $listView.FullRowSelect = $true; $listView.HideSelection = $false
-$listView.Location = New-Object System.Drawing.Point(12, 12)
-$listView.Size     = New-Object System.Drawing.Size(676, 330)
-[void]$listView.Columns.Add('名称', 130)
-[void]$listView.Columns.Add('接口地址', 240)
-[void]$listView.Columns.Add('Token', 150)
-[void]$listView.Columns.Add('主模型', 150)
-$form.Controls.Add($listView)
+    # 厂商主色：与 wt tab / 状态栏配色一致（glm 系=青，deepseek 系=蓝，官方=绿，其余=黄）
+    $brand = if (-not $p.Url) { '#2ECC71' }
+             elseif ($p.Name -like 'glm*') { '#00B8A9' }
+             elseif ($p.Name -like 'deepseek*') { '#4D6FFF' }
+             else { '#F1C40F' }
+    $initial = $p.Name.Substring(0, 1).ToUpper()
 
-$status = New-Object System.Windows.Forms.StatusStrip
-$statusLabel = New-Object System.Windows.Forms.ToolStripStatusLabel
-$statusLabel.Text = "目录: $providersDir   |   双击行编辑；启动用 cc / 右键菜单"
-[void]$status.Items.Add($statusLabel)
-$form.Controls.Add($status)
+    $st = @{ hover = $false }
+    $card.Add_Paint({
+        param($s, $e)
+        $e.Graphics.SmoothingMode = 'AntiAlias'
+        $path = Get-RoundPath 0 0 ($s.Width - 1) ($s.Height - 1) 10
+        $e.Graphics.FillPath((New-Object System.Drawing.SolidBrush (Get-Clr $theme.card)), $path)
+        $edge = if ($st.hover) { $theme.accent } else { $theme.border }
+        $e.Graphics.DrawPath((New-Object System.Drawing.Pen (Get-Clr $edge)), $path)
+        $path.Dispose()
+    }.GetNewClosure())
+    # 鼠标移到子控件上会误触发 MouseLeave，按坐标判断是否真的离开卡片
+    $card.Add_MouseEnter({ $st.hover = $true; $card.Invalidate() }.GetNewClosure())
+    $card.Add_MouseLeave({
+        if (-not $card.ClientRectangle.Contains($card.PointToClient([System.Windows.Forms.Cursor]::Position))) {
+            $st.hover = $false; $card.Invalidate()
+        }
+    }.GetNewClosure())
 
-function New-Btn([string]$text, [int]$x, [int]$w) {
-    $b = New-Object System.Windows.Forms.Button
-    $b.Text = $text; $b.Location = New-Object System.Drawing.Point($x, 352); $b.Size = New-Object System.Drawing.Size($w, 30)
-    $form.Controls.Add($b); return $b
+    $editClick = { Invoke-EditProvider $p.Name }.GetNewClosure()
+
+    # 图标方块（厂商色 + 名称首字母）
+    $icon = New-Object System.Windows.Forms.Panel
+    $icon.SetBounds((Px 20), (Px 22), (Px 44), (Px 44))
+    $icon.Cursor = 'Hand'
+    $icon.Add_Paint({
+        param($s, $e)
+        $e.Graphics.SmoothingMode = 'AntiAlias'
+        $path = Get-RoundPath 0 0 ($s.Width - 1) ($s.Height - 1) 10
+        $e.Graphics.FillPath((New-Object System.Drawing.SolidBrush (Get-Clr $brand)), $path)
+        $path.Dispose()
+        $fmt = New-Object System.Drawing.StringFormat
+        $fmt.Alignment = 'Center'; $fmt.LineAlignment = 'Center'
+        $e.Graphics.DrawString($initial, (New-Object System.Drawing.Font('Segoe UI Semibold', 15)), [System.Drawing.Brushes]::White, (New-Object System.Drawing.RectangleF(0, 0, $s.Width, $s.Height)), $fmt)
+    }.GetNewClosure())
+    $icon.Add_Click($editClick)
+    [void]$card.Controls.Add($icon)
+
+    $lblName = New-Object System.Windows.Forms.Label
+    $lblName.Text = $p.Name
+    $lblName.Font = $uiFontCard
+    $lblName.ForeColor = Get-Clr $theme.text
+    $lblName.BackColor = 'Transparent'
+    $lblName.Location = New-Object System.Drawing.Point((Px 80), (Px 13))
+    $lblName.AutoSize = $true
+    $lblName.Cursor = 'Hand'
+    $lblName.Add_Click($editClick)
+    [void]$card.Controls.Add($lblName)
+
+    $lblMeta = New-Object System.Windows.Forms.Label
+    $lblMeta.Text = if ($p.Url) { "$($p.Url)  ·  $($p.Model)" } else { "官方 API  ·  $($p.Model)" }
+    $lblMeta.Font = $uiFontSub
+    $lblMeta.ForeColor = Get-Clr $theme.sub
+    $lblMeta.BackColor = 'Transparent'
+    $lblMeta.Location = New-Object System.Drawing.Point((Px 80), (Px 39))
+    $lblMeta.AutoSize = $true
+    $lblMeta.Cursor = 'Hand'
+    $lblMeta.Add_Click($editClick)
+    [void]$card.Controls.Add($lblMeta)
+
+    $lblTok = New-Object System.Windows.Forms.Label
+    $lblTok.Text = "Token: $($p.Masked)"
+    $lblTok.Font = $uiFontSub
+    $lblTok.ForeColor = Get-Clr $theme.sub
+    $lblTok.BackColor = 'Transparent'
+    $lblTok.Location = New-Object System.Drawing.Point((Px 80), (Px 59))
+    $lblTok.AutoSize = $true
+    $lblTok.Cursor = 'Hand'
+    $lblTok.Add_Click($editClick)
+    [void]$card.Controls.Add($lblTok)
+
+    # 右下操作
+    $btnEdit = New-FlatButton '编辑' 56 28
+    $btnEdit.Location = New-Object System.Drawing.Point((Px 450), (Px 48))
+    $btnEdit.Anchor = 'Right,Bottom'
+    $btnTest = New-FlatButton '测试' 56 28
+    $btnTest.Location = New-Object System.Drawing.Point((Px 510), (Px 48))
+    $btnTest.Anchor = 'Right,Bottom'
+    $btnDel = New-FlatButton '删除' 56 28 'danger'
+    $btnDel.Location = New-Object System.Drawing.Point((Px 570), (Px 48))
+    $btnDel.Anchor = 'Right,Bottom'
+    $card.Controls.AddRange(@($btnEdit, $btnTest, $btnDel))
+    $btnEdit.Add_Click($editClick)
+    $btnTest.Add_Click({ Invoke-TestProvider $p.Name }.GetNewClosure())
+    $btnDel.Add_Click({ Invoke-DelProvider $p.Name }.GetNewClosure())
+
+    return $card
 }
-$btnAdd    = New-Btn '新增'          12  70
-$btnEdit   = New-Btn '编辑'          88  70
-$btnDel    = New-Btn '删除'          164 70
-$btnTest   = New-Btn '测试连通'      260 90
-$btnFolder = New-Btn '打开目录'      358 90
-$btnClose  = New-Btn '关闭'          616 70
 
-function Refresh-List {
-    $listView.Items.Clear()
-    foreach ($p in (Get-Providers)) {
-        $item = New-Object System.Windows.Forms.ListViewItem($p.Name)
-        [void]$item.SubItems.Add($p.Url)
-        [void]$item.SubItems.Add($p.Masked)
-        [void]$item.SubItems.Add($p.Model)
-        [void]$listView.Items.Add($item)
-    }
-}
-
-$btnAdd.Add_Click({
+function Invoke-AddProvider {
     $r = Show-EditDialog $null
     if ($r) { Save-Provider $r.Name $r.Env | Out-Null; Refresh-List }
-})
-$btnEdit.Add_Click({
-    if ($listView.SelectedItems.Count -eq 0) { return }
-    $sel = (Get-Providers) | Where-Object { $_.Name -eq $listView.SelectedItems[0].Text }
+}
+function Invoke-EditProvider([string]$Name) {
+    $sel = (Get-Providers) | Where-Object { $_.Name -eq $Name }
     if ($sel) {
         $r = Show-EditDialog $sel
         if ($r) {
@@ -307,24 +558,127 @@ $btnEdit.Add_Click({
             Refresh-List
         }
     }
-})
-$listView.Add_DoubleClick({ $btnEdit.PerformClick() })
-$btnDel.Add_Click({
-    if ($listView.SelectedItems.Count -eq 0) { return }
-    $name = $listView.SelectedItems[0].Text
-    $ans = [System.Windows.Forms.MessageBox]::Show($form, "确定删除 $name ？", '确认', 'YesNo', 'Warning')
-    if ($ans -eq 'Yes') { Remove-Item -LiteralPath (Join-Path $providersDir ($name + '.json')) -Force; Refresh-List }
-})
-$btnTest.Add_Click({
-    if ($listView.SelectedItems.Count -eq 0) { return }
-    $sel = (Get-Providers) | Where-Object { $_.Name -eq $listView.SelectedItems[0].Text }
+}
+function Invoke-DelProvider([string]$Name) {
+    $ans = [System.Windows.Forms.MessageBox]::Show($form, "确定删除 $Name ？", '确认', 'YesNo', 'Warning')
+    if ($ans -eq 'Yes') { Remove-Item -LiteralPath (Join-Path $providersDir ($Name + '.json')) -Force; Refresh-List }
+}
+function Invoke-TestProvider([string]$Name) {
+    $sel = (Get-Providers) | Where-Object { $_.Name -eq $Name }
     if (-not $sel) { return }
-    $statusLabel.Text = "正在测试 $($sel.Name) ..."
+    $statusLabel.Text = "正在测试 $Name …"
+    $statusLabel.ForeColor = Get-Clr $theme.sub
     $form.Refresh()
-    $statusLabel.Text = "$($sel.Name): $(Test-Provider $sel)"
+    $msg = "$($sel.Name): $(Test-Provider $sel)"
+    $statusLabel.Text = $msg
+    if ($msg -match '不可达') { $statusLabel.ForeColor = Get-Clr $theme.red }
+    elseif ($msg -match 'HTTP') { $statusLabel.ForeColor = Get-Clr $theme.green }
+}
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text          = 'Claude Code 供应商管理'
+$form.StartPosition = 'CenterScreen'
+$form.ClientSize    = New-Object System.Drawing.Size((Px 740), (Px 540))
+$form.MinimumSize   = New-Object System.Drawing.Size((Px 580), (Px 420))
+$form.TopMost       = $true
+# AutoScaleMode 必须显式 None：顶级 Form 默认按字体自动缩放，显示时会把窗口压回 96dpi 基准
+$form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
+$form.Font          = $uiFont
+$form.BackColor     = Get-Clr $theme.bg
+
+# 卡片列表（Dock 顺序：flow 先加才不会被顶栏/状态栏盖住）
+$flow = New-Object System.Windows.Forms.FlowLayoutPanel
+$flow.Dock = 'Fill'
+$flow.FlowDirection = 'TopDown'
+$flow.WrapContents = $false
+$flow.AutoScroll = $true
+$flow.BackColor = Get-Clr $theme.bg
+$flow.Padding = New-Object System.Windows.Forms.Padding((Px 18), (Px 8), (Px 18), (Px 8))
+
+# 顶栏：标题 + 副标题 + 右侧按钮
+$top = New-Object System.Windows.Forms.Panel
+$top.Dock = 'Top'
+$top.Height = Px 64
+$top.BackColor = Get-Clr $theme.bg
+$lblTitle = New-Object System.Windows.Forms.Label
+$lblTitle.Text = 'Claude Code 供应商'
+$lblTitle.Font = $uiFontTitle
+$lblTitle.ForeColor = Get-Clr $theme.text
+$lblTitle.Location = New-Object System.Drawing.Point((Px 20), (Px 12))
+$lblTitle.AutoSize = $true
+[void]$top.Controls.Add($lblTitle)
+$lblSubTitle = New-Object System.Windows.Forms.Label
+$lblSubTitle.Text = 'providers 配置管理 · 点击卡片编辑 · 启动用 cc / 右键菜单'
+$lblSubTitle.Font = $uiFontSub
+$lblSubTitle.ForeColor = Get-Clr $theme.sub
+$lblSubTitle.Location = New-Object System.Drawing.Point((Px 21), (Px 39))
+$lblSubTitle.AutoSize = $true
+[void]$top.Controls.Add($lblSubTitle)
+$top.Add_Paint({
+    param($s, $e)
+    $e.Graphics.DrawLine((New-Object System.Drawing.Pen (Get-Clr $theme.border)), 0, $s.Height - 1, $s.Width, $s.Height - 1)
 })
+$topBtns = New-Object System.Windows.Forms.Panel
+$topBtns.Dock = 'Right'
+$topBtns.Width = Px 252
+$topBtns.BackColor = Get-Clr $theme.bg
+$btnFolder = New-FlatButton '打开目录' 92 32
+$btnFolder.Location = New-Object System.Drawing.Point((Px 14), (Px 16))
+$btnAdd = New-FlatButton '＋ 新增供应商' 130 32 'orange'
+$btnAdd.Location = New-Object System.Drawing.Point((Px 112), (Px 16))
+$topBtns.Controls.AddRange(@($btnFolder, $btnAdd))
+[void]$top.Controls.Add($topBtns)
+
+# 底部状态条（顶部分隔线 + 目录/测试结果）
+$bottom = New-Object System.Windows.Forms.Panel
+$bottom.Dock = 'Bottom'
+$bottom.Height = Px 34
+$bottom.BackColor = Get-Clr $theme.bg
+$bottom.Add_Paint({
+    param($s, $e)
+    $e.Graphics.DrawLine((New-Object System.Drawing.Pen (Get-Clr $theme.border)), 0, 0, $s.Width, 0)
+})
+$statusLabel = New-Object System.Windows.Forms.Label
+$statusLabel.Dock = 'Fill'
+$statusLabel.TextAlign = 'MiddleLeft'
+$statusLabel.Font = $uiFontSub
+$statusLabel.ForeColor = Get-Clr $theme.sub
+$statusLabel.Padding = New-Object System.Windows.Forms.Padding((Px 20), 0, (Px 20), 0)
+$statusLabel.Text = "目录: $providersDir"
+$bottom.Controls.Add($statusLabel)
+
+$form.Controls.Add($flow)
+$form.Controls.Add($top)
+$form.Controls.Add($bottom)
+
+function Refresh-List {
+    $flow.SuspendLayout()
+    $flow.Controls.Clear()
+    $any = $false
+    foreach ($p in (Get-Providers)) {
+        $any = $true
+        $flow.Controls.Add((New-ProviderCard $p))
+    }
+    if (-not $any) {
+        $empty = New-Object System.Windows.Forms.Label
+        $empty.Text = '暂无配置 — 点右上「＋ 新增供应商」创建'
+        $empty.Font = $uiFontSub
+        $empty.ForeColor = Get-Clr $theme.sub
+        $empty.AutoSize = $true
+        $empty.Margin = New-Object System.Windows.Forms.Padding((Px 18), (Px 26), (Px 18), 0)
+        $flow.Controls.Add($empty)
+    }
+    $flow.ResumeLayout($true)
+    # 卡宽铺满列表区（滚动条余量 36）
+    foreach ($c in $flow.Controls) {
+        if ($c -is [System.Windows.Forms.Panel]) { $c.Width = [Math]::Max((Px 320), $flow.ClientSize.Width - (Px 36)) }
+    }
+}
+
+$btnAdd.Add_Click({ Invoke-AddProvider })
 $btnFolder.Add_Click({ Start-Process explorer.exe "/select,`"$providersDir`"" })
-$btnClose.Add_Click({ $form.Close() })
+$form.Add_Shown({ Enable-DarkTitleBar $form })
+$form.Add_Resize({ foreach ($c in $flow.Controls) { if ($c -is [System.Windows.Forms.Panel]) { $c.Width = [Math]::Max((Px 320), $flow.ClientSize.Width - (Px 36)) } } })
 
 Refresh-List
 [void]$form.ShowDialog()
@@ -503,7 +857,10 @@ function Get-GlmUsage([string]$ApiHost, [string]$Token) {
             if ([int]$lim.unit -eq 3) { $kind = 'h5' }
             elseif ([int]$lim.unit -eq 6) { $kind = 'week' }
             elseif (-not $lim.nextResetTime) { $kind = 'h5' } else { $kind = 'week' }
-            $items += [pscustomobject]@{ kind = $kind; pct = [int][double]$lim.percentage }
+            # nextResetTime：毫秒时间戳（周期耗尽态可能缺失），保存供状态栏算重置倒计时
+            $resetMs = 0
+            try { if ($lim.nextResetTime) { $resetMs = [long][double]$lim.nextResetTime } } catch {}
+            $items += [pscustomobject]@{ kind = $kind; pct = [int][double]$lim.percentage; resetMs = $resetMs }
         }
         $tiers = @()
         foreach ($k in 'h5', 'week') {
@@ -602,6 +959,15 @@ $provColor = if ($prov -eq 'official') { Ansi '#2ECC71' }
              else { Ansi '#F1C40F' }
 $pctColor = if ($pct -ge 80) { Ansi '#E74C3C' } elseif ($pct -ge 50) { Ansi '#F1C40F' } else { Ansi '#2ECC71' }
 function PctColor([int]$v) { if ($v -ge 80) { Ansi '#E74C3C' } elseif ($v -ge 50) { Ansi '#F1C40F' } else { Ansi '#2ECC71' } }
+# 重置倒计时：>48h 显示 "6d18h"，>1h 显示 "2h31m"，<1h 显示 "37m"；已过期/无效返回空
+function Format-Countdown([double]$RemainMs) {
+    if ($RemainMs -le 60000) { return '' }
+    $mins = [int][Math]::Floor($RemainMs / 60000)
+    $h = [Math]::Floor($mins / 60)
+    if ($h -ge 48) { $d = [Math]::Floor($h / 24); return "${d}d$($h % 24)h" }
+    if ($h -gt 0) { return "${h}h$($mins % 60)m" } else { return "$($mins)m" }
+}
+$nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 
 # ---- 限额/余额 ----
 # 官方订阅：stdin 的 rate_limits 直接可用（Pro/Max 才有；API key 供应商无此字段）
@@ -619,8 +985,17 @@ function Update-UsageAsync([string]$Prov) {
 $usageSeg = ''
 if ($data.rate_limits) {
     $rl = $data.rate_limits
-    if ($null -ne $rl.five_hour.used_percentage)  { $p = [int]$rl.five_hour.used_percentage;  $usageSeg += " · 5h $(PctColor $p)$p%$cEnd" }
-    if ($null -ne $rl.seven_day.used_percentage) { $p = [int]$rl.seven_day.used_percentage; $usageSeg += " · 周 $(PctColor $p)$p%$cEnd" }
+    # resets_at：重置时间（ISO 字符串），存在时附倒计时
+    function Get-ResetCd($Rl) {
+        if (-not $Rl.resets_at) { return '' }
+        try {
+            $cd = Format-Countdown ([DateTimeOffset]::Parse([string]$Rl.resets_at).ToUnixTimeMilliseconds() - $nowMs)
+            if ($cd) { return " $cd" }
+        } catch {}
+        return ''
+    }
+    if ($null -ne $rl.five_hour.used_percentage)  { $p = [int]$rl.five_hour.used_percentage;  $usageSeg += " · 5h $(PctColor $p)$p%$cEnd$(Get-ResetCd $rl.five_hour)" }
+    if ($null -ne $rl.seven_day.used_percentage) { $p = [int]$rl.seven_day.used_percentage; $usageSeg += " · 周 $(PctColor $p)$p%$cEnd$(Get-ResetCd $rl.seven_day)" }
 } elseif ($prov -ne 'official') {
     $cacheFile = Join-Path $env:USERPROFILE '.claude\cc-usage-cache.json'
     $ue = $null
@@ -631,8 +1006,11 @@ if ($data.rate_limits) {
         if (((Get-Date) - [datetime]$ue.fetchedAt).TotalMinutes -gt 10) { Update-UsageAsync $prov }
         foreach ($t in @($ue.tiers)) {
             $p = [int]$t.pct
-            if ($t.kind -eq 'h5')   { $usageSeg += " · 5h $(PctColor $p)$p%$cEnd" }
-            if ($t.kind -eq 'week') { $usageSeg += " · 周 $(PctColor $p)$p%$cEnd" }
+            $cd = ''
+            # 旧缓存无 resetMs 字段时不显示，下一轮缓存刷新（≤10 分钟）自然带上
+            if ($t.resetMs) { $cd = Format-Countdown ([double]$t.resetMs - $nowMs) }
+            if ($t.kind -eq 'h5')   { $usageSeg += " · 5h $(PctColor $p)$p%$cEnd" + $(if ($cd) { " $cd" }) }
+            if ($t.kind -eq 'week') { $usageSeg += " · 周 $(PctColor $p)$p%$cEnd" + $(if ($cd) { " $cd" }) }
         }
         if ($ue.balance) { $usageSeg += " · ¥$($ue.balance)" }
     } elseif (-not $ue) {
