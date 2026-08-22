@@ -1,0 +1,5 @@
+# 供应商配置（内含明文 token，绝不入库）
+providers/
+
+*.log
+*.tmp

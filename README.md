@@ -1,0 +1,84 @@
+# cc-picker
+
+Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的模型。
+
+在同一台机器上，一个终端用官方 Claude，一个用 GLM 个人号，一个用 GLM 公司号，一个用 DeepSeek……互不干扰。附带 GUI 配置管理器和账号识别状态栏。
+
+## 功能
+
+| 能力 | 说明 |
+|---|---|
+| `cc` 命令 | 终端内菜单选供应商启动；熟练后 `cc glm`、`cc deepseek-work` 直达 |
+| 资源管理器右键 | 任意目录右键 →「Claude Code（选模型）」→ 弹窗选择 → 新终端窗口在该目录启动 |
+| `ccm` 管理器 | GUI 增删改供应商配置；GLM / DeepSeek / 官方一键预设；连通测试（发最小请求回报 HTTP 状态） |
+| 状态栏 | 常驻显示 `[账号] 模型 · 目录 · 上下文%`，用 token 反查配置文件识别账号——连裸 `claude` 都能识别当前用的哪个号 |
+| tab 颜色 | 按厂商归组着色，与状态栏同色：GLM 系青 / DeepSeek 系蓝 / 官方绿 / 其他黄 |
+
+支持 Git Bash 和 PowerShell 7 的 `cc` / `ccm` 命令。
+
+## 快速开始
+
+前置：Windows + 已安装 Claude Code（`claude` 在 PATH）；建议装 PowerShell 7 与 Windows Terminal；Git Bash 可选。
+
+```powershell
+# 1. 安装（幂等，可重复执行）
+pwsh -ExecutionPolicy Bypass -File cc-setup.ps1
+
+# 2. 打开管理器，贴入各供应商 token（或点预设再填 token）
+ccm
+
+# 3. 新开终端
+cc            # 菜单选择
+cc glm        # 直达某个配置
+```
+
+安装包会部署：`~/.claude/cc-launch.ps1`（启动器）、`cc-manager.ps1`（管理器）、`cc-statusline.ps1`（状态栏）、`providers/*.json`（配置模板）、右键菜单注册、`cc`/`ccm` 命令、settings.json 的 `statusLine`。
+
+## 工作原理
+
+一切归结为一条命令：
+
+```
+claude --settings "C:\Users\you\.claude\providers\glm.json"
+```
+
+- `--settings` 属于命令行参数层，优先级高于用户级 `~/.claude/settings.json`，且与其**分层合并**——provider 文件里写的键覆盖全局，没写的键继续继承（全局的行为开关不受影响）。
+- **为什么不用 shell 环境变量**（`ANTHROPIC_BASE_URL=xxx claude`）？因为 settings 文件的 `env` 块在启动时会把同名变量写回进程环境、覆盖 shell 传入值——只要全局配置里有 `ANTHROPIC_BASE_URL`，环境变量方案就失效。`--settings` 是唯一可靠的按进程覆盖方式。
+- 每个进程启动时各读各的参数，多个终端互不干扰——这就是"一个窗口官方、一个窗口 GLM"的原理。
+
+## 与 cc-switch 的关系
+
+**完全独立**，也可以共存：
+
+- cc-switch 管"默认"：它切换的是全局 `~/.claude/settings.json`，影响所有不带参数的裸 `claude`。
+- cc-picker 管"按需"：`cc <名称>`、右键菜单，每次启动独立生效。
+- `cc` 菜单里的 `default` = 裸 `claude` = 跟随 cc-switch 当前选择（没装 cc-switch 则是 settings.json 的静态内容）。
+
+共存时注意一条：cc-switch 切换供应商时会**整份重写** settings.json，只保留它"通用配置"里登记的顶层键——所以本项目写入的 `statusLine` 需要加进 cc-switch 的 Claude 通用配置，否则切换后状态栏会消失（安装脚本检测到 cc-switch 时会提醒）。
+
+## 多机器迁移
+
+1. 拷 `cc-setup.ps1` 到新机器执行；
+2. 拷 `~/.claude/providers/*.json`（内含明文 token，注意传输渠道），或在新机器 `ccm` 重配。
+
+token 不打进安装包，模板只有占位符。
+
+## 卸载
+
+```powershell
+# 右键菜单
+Remove-Item 'HKCU:\Software\Classes\Directory\shell\ClaudePicker','HKCU:\Software\Classes\Directory\Background\shell\ClaudePicker' -Recurse
+# 脚本与配置
+Remove-Item ~\.claude\cc-launch.ps1, ~\.claude\cc-manager.ps1, ~\.claude\cc-statusline.ps1, ~\.claude\providers -Recurse
+# settings.json 里删掉 statusLine 键；bashrc / pwsh profile 里删除 ">>> cc 多供应商启动器 >>>" 标记块
+```
+
+## FAQ
+
+- **状态栏消失了？** 装了 cc-switch 的话见上节——把 `statusLine` 段加进它的通用配置。
+- **状态栏的账号名怎么来的？** 启动时用进程环境里的 `ANTHROPIC_AUTH_TOKEN` 逐一比对 `providers/*.json`，匹配即显示文件名；匹配不到则按 `ANTHROPIC_BASE_URL` 的主机名显示，两者皆空显示 `official`。
+- **在盘符根目录右键报“目录不存在”？** 旧版本问题（`"C:\"` 的 `\"` 被解析成转义引号），已修复。
+
+## License
+
+[MIT](LICENSE)
