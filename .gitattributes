@@ -1,4 +1,8 @@
 # shell 脚本与 Node 核心强制 LF：macOS/Linux 直接可用，
-# Windows 检出也不转 CRLF（Git Bash 执行 install.sh 不受影响）
+# Windows 检出也不转 CRLF（Git Bash 执行 install.sh 不受影响）；
+# bin/ 与 package.json 也必须 LF——否则 Windows 上 npm publish 打出的包
+# 会让 unix 用户的 shebang 带 \r 而无法执行
 *.sh text eol=lf
 core/** text eol=lf
+bin/** text eol=lf
+package.json text eol=lf
