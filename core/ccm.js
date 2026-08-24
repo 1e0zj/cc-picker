@@ -28,8 +28,9 @@ const noBrowser = args.includes('--no-browser');
 
 // ---------- 数据操作（与 Windows 版 cc-manager.ps1 行为一致） ----------
 
-// 保存：保留原 env 其余键，仅覆盖表单里的键；_NAME 变体去掉 [1M] 之类的档位后缀
-function saveFromForm(body) {
+// 保存（cc-switch 式 JSON 编辑）：text 为文件完整内容，服务端校验后原样落盘。
+// 允许 env 之外的顶层键（provider 文件本质是 --settings 层，可带其他配置）。
+function saveRaw(body) {
   const name = String(body.name || '').trim();
   const oldName = body.oldName ? String(body.oldName) : null;
   if (!/^[A-Za-z0-9_-]+$/.test(name)) {
@@ -39,27 +40,23 @@ function saveFromForm(body) {
     return { error: `已存在同名配置: ${name}` };
   }
 
-  const env = { ...(body.rawEnv || {}) };
-  const strip = v => String(v || '').trim().replace(/\[.*$/, '');
-  const trim = v => String(v || '').trim();
-  env.ANTHROPIC_BASE_URL                  = trim(body.url);
-  env.ANTHROPIC_AUTH_TOKEN                = trim(body.token);
-  env.ANTHROPIC_MODEL                     = trim(body.model);
-  env.ANTHROPIC_DEFAULT_HAIKU_MODEL       = trim(body.haiku);
-  env.ANTHROPIC_DEFAULT_OPUS_MODEL        = trim(body.opus);
-  env.ANTHROPIC_DEFAULT_SONNET_MODEL      = trim(body.sonnet);
-  env.ANTHROPIC_DEFAULT_FABLE_MODEL       = trim(body.fable);
-  env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME  = strip(body.haiku);
-  env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME   = strip(body.opus);
-  env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME = strip(body.sonnet);
-  env.ANTHROPIC_DEFAULT_FABLE_MODEL_NAME  = strip(body.fable);
-  env.API_TIMEOUT_MS                      = trim(body.timeout);
+  let parsed;
+  try {
+    parsed = JSON.parse(String(body.text || ''));
+  } catch (e) {
+    return { error: `JSON 解析失败：${e.message}` };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+      || !parsed.env || typeof parsed.env !== 'object' || Array.isArray(parsed.env)) {
+    return { error: 'JSON 结构应为 { "env": { ... } }' };
+  }
 
   // 改名 = 删旧文件，再按新名写入
   if (oldName && oldName !== name) {
     try { fs.unlinkSync(lib.providerPath(oldName)); } catch {}
   }
-  lib.saveProvider(name, env);
+  fs.mkdirSync(lib.PROVIDERS_DIR, { recursive: true });
+  fs.writeFileSync(lib.providerPath(name), JSON.stringify(parsed, null, 2) + '\n');
   return { ok: true };
 }
 
@@ -150,12 +147,13 @@ async function handler(req, res) {
     if (req.method === 'GET' && url.pathname === '/api/providers') {
       const providers = lib.getProviders().map(p => ({
         name: p.name, url: p.url, model: p.model, masked: p.masked, env: p.env,
+        raw: lib.readProviderJson(p.path),
       }));
       return sendJson(res, 200, { providers, dir: lib.PROVIDERS_DIR });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/save') {
-      const r = saveFromForm(await readBody(req));
+      const r = saveRaw(await readBody(req));
       return sendJson(res, r.error ? 400 : 200, r);
     }
 

@@ -30,6 +30,13 @@ function readProviderEnv(file) {
   } catch { return null; }
 }
 
+// 完整读出文件 JSON（含 env 之外的顶层键，供 JSON 编辑用）
+function readProviderJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch { return null; }
+}
+
 function providerPath(name) { return path.join(PROVIDERS_DIR, name + '.json'); }
 
 // 对应 PS 版 Get-Providers：名称 / 地址 / token（含脱敏）/ 模型 / 完整 env
@@ -69,5 +76,5 @@ function brandColor(p) {
 
 module.exports = {
   HOME, CLAUDE_DIR, PROVIDERS_DIR, USAGE_CACHE, USAGE_LOCK,
-  listProviderFiles, readProviderEnv, getProviders, providerPath, saveProvider, brandColor,
+  listProviderFiles, readProviderEnv, readProviderJson, getProviders, providerPath, saveProvider, brandColor,
 };
