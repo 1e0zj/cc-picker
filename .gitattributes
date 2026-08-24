@@ -1,0 +1,4 @@
+# shell 脚本与 Node 核心强制 LF：macOS/Linux 直接可用，
+# Windows 检出也不转 CRLF（Git Bash 执行 install.sh 不受影响）
+*.sh text eol=lf
+core/** text eol=lf
