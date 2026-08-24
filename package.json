@@ -1,0 +1,40 @@
+{
+  "name": "cc-picker",
+  "version": "0.1.0",
+  "description": "Claude Code 多供应商启动器 — 一个终端一个供应商；附账号识别状态栏与 Web 配置管理器",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1e0zj/cc-picker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/1e0zj/cc-picker/issues"
+  },
+  "homepage": "https://github.com/1e0zj/cc-picker#readme",
+  "author": "1e0zj",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "provider",
+    "switcher",
+    "launcher",
+    "multi-provider",
+    "glm",
+    "deepseek"
+  ],
+  "bin": {
+    "cc-picker": "bin/cli.js",
+    "ccp": "core/ccp.js",
+    "ccm": "core/ccm.js"
+  },
+  "files": [
+    "bin",
+    "core",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

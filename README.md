@@ -56,8 +56,11 @@ ccp glm       # 直达某个配置
 **macOS / Linux**（前置：已装 Claude Code；Node 18+，装 Claude Code 时通常已具备）：
 
 ```bash
-# 1. 安装（幂等，可重复执行）
-bash install.sh
+# 1. 安装——npm 全局装（推荐）
+npm install -g cc-picker
+cc-picker install
+#    或免安装一次跑：npx cc-picker install
+#    或克隆本仓库后：bash install.sh
 
 # 2. 打开管理器（本地 Web 页面，自动弹浏览器），贴入各供应商 token
 ccm
@@ -67,7 +70,7 @@ ccp           # 菜单选择
 ccp glm       # 直达某个配置
 ```
 
-安装包会部署：`~/.claude/ccp.js`（启动器）、`ccm.js` + `ccm-page.html`（Web 管理器）、`cc-statusline.js`（状态栏）、`cc-usage.js`（限额/余额查询）、`providers/*.json`（配置模板）、bash/zsh 的 `ccp`/`ccm` 函数、settings.json 的 `statusLine`。
+安装会部署：`~/.claude/ccp.js`（启动器）、`ccm.js` + `ccm-page.html`（Web 管理器）、`cc-statusline.js`（状态栏）、`cc-usage.js`（限额/余额查询）、`providers/*.json`（配置模板）、bash/zsh 的 `ccp`/`ccm` 函数、settings.json 的 `statusLine`。npm 全局装的用户还有 `ccp`/`ccm`/`cc-picker` 全局命令（维护：`cc-picker install | uninstall | status`）；运行时都在 `~/.claude` 稳定路径，换 node 版本或卸载 npm 包不影响已装好的部分。
 
 ## 工作原理
 
