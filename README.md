@@ -2,11 +2,20 @@
 
 [![npm](https://img.shields.io/npm/v/cc-picker.svg)](https://www.npmjs.com/package/cc-picker)
 
-Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的模型。
+Claude Code 多供应商启动器 —— 多开终端各用各的模型，当前用的哪个号、还剩多少量，状态栏一眼看清。
+
+## 解决什么问题
+
+日常用 Claude Code，大概率遇到过这两件事：
+
+- **同时多开终端，想让每个终端用不同的模型。** cc-switch 做不到——它切换的是全局配置，所有终端一起跟着变。
+- **订阅的厂商越来越多，切换麻烦还心里没底。** 每次都得去 cc-switch 切一下，切完还得 `/model` 确认当前终端用的到底是谁。
+
+cc-picker 的做法很简洁：用 claude 启动参数 [`--settings`](#工作原理) 给每个进程指定不同厂商的配置文件——**各 Claude Code 进程用哪个厂商，启动那一刻就定了，互不干扰**。再配上自定义状态栏，`[账号] 模型 · 目录 · 上下文% · 限额` 常驻显示，用的是谁、还能用多少，不用猜。
+
+于是日常就变成：一个终端跑官方、一个 GLM 个人号、一个 GLM 公司号、一个 DeepSeek 同时开工；熟练后 `ccp glm` 两个词直达，Windows 上还支持在任意目录右键启动。
 
 > **跨平台**：Windows 提供完整体验（PowerShell：含资源管理器右键菜单、终端标签着色）；macOS / Linux 提供 Node 核心版（`ccp` 启动器、状态栏、Web 版 `ccm` 管理器），providers 配置两端互通。右键菜单与标签颜色为 Windows 专属功能。
-
-在同一台机器上，一个终端用官方 Claude，一个用 GLM 个人号，一个用 GLM 公司号，一个用 DeepSeek……互不干扰。附带 GUI 配置管理器和账号识别状态栏。
 
 ## 界面预览
 
