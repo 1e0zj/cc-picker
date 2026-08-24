@@ -1,5 +1,7 @@
 # cc-picker
 
+[![npm](https://img.shields.io/npm/v/cc-picker.svg)](https://www.npmjs.com/package/cc-picker)
+
 Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的模型。
 
 > **跨平台**：Windows 提供完整体验（PowerShell：含资源管理器右键菜单、终端标签着色）；macOS / Linux 提供 Node 核心版（`ccp` 启动器、状态栏、Web 版 `ccm` 管理器），providers 配置两端互通。右键菜单与标签颜色为 Windows 专属功能。
@@ -131,13 +133,7 @@ npm version patch        # 自动改 package.json + 打 tag + 提交（minor/maj
 git push --follow-tags
 ```
 
-发布用 npm **trusted publishing**（OIDC）：仓库不存任何 npm token，GitHub 签发短时身份令牌完成发布，provenance 自动生成。**首次启用需要一次性配置**——
-
-1. 用你的账号手动发布第一版：`npm login && npm publish`
-2. npmjs.com 包页 → Settings → Trusted Publishers → 添加 `1e0zj/cc-picker`（workflow 填 `release.yml`）
-3. 之后每次 `npm version` + 推 tag 即自动发布
-
-（配置完成前推 tag 会在最后一步失败，无害，配好后重跑 workflow 即可。）
+发布用 npm **trusted publishing**（OIDC）：仓库不存任何 npm token，GitHub 签发短时身份令牌完成发布，provenance 自动生成。首次 0.1.0 为手动发布并在 npm 登记 Trusted Publishers，此后全部走 tag 自动发布。
 
 ## License
 
