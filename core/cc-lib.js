@@ -23,9 +23,17 @@ function listProviderFiles() {
     .map(f => path.join(PROVIDERS_DIR, f));
 }
 
+// 读文件文本并剥掉 UTF-8 BOM——Windows 版 cc-setup.ps1 写的 providers 全带 BOM，
+// JSON.parse 不认 BOM 前缀，不剥的话 token 匹配 / 卡片 / 编辑回显全部失效
+function readTextNoBom(file) {
+  const s = fs.readFileSync(file, 'utf8');
+  // 剥掉 UTF-8 BOM（U+FEFF）：JSON.parse 不认它做前缀
+  return s.charCodeAt(0) === 0xFEFF ? s.slice(1) : s;
+}
+
 function readProviderEnv(file) {
   try {
-    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const j = JSON.parse(readTextNoBom(file));
     return (j && j.env && typeof j.env === 'object') ? j.env : null;
   } catch { return null; }
 }
@@ -33,7 +41,7 @@ function readProviderEnv(file) {
 // 完整读出文件 JSON（含 env 之外的顶层键，供 JSON 编辑用）
 function readProviderJson(file) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    return JSON.parse(readTextNoBom(file));
   } catch { return null; }
 }
 

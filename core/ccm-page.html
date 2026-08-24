@@ -201,7 +201,10 @@ function setStatus(msg, cls) {
 }
 
 async function reload() {
-  const j = await api('/api/providers');
+  const j = await api('/api/providers').catch(e => {
+    setStatus('加载失败：' + e.message, 'bad');
+    throw e;
+  });
   providers = j.providers;
   $('dir').textContent = '目录: ' + j.dir;
   const list = $('list');
@@ -348,7 +351,8 @@ $('btn-cancel').addEventListener('click', closeDialog);
 $('btn-save').addEventListener('click', save);
 $('overlay').addEventListener('mousedown', e => { if (e.target === $('overlay')) closeDialog(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDialog(); });
-$('btn-folder').addEventListener('click', () => api('/api/open-folder'));
+$('btn-folder').addEventListener('click', () =>
+  api('/api/open-folder', {}).catch(e => setStatus('打开目录失败：' + e.message, 'bad')));
 // Tab 在编辑区插入缩进而不是跳出焦点
 $('f-json').addEventListener('keydown', e => {
   if (e.key === 'Tab') {
