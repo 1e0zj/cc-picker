@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 'use strict';
-// cc.js — Claude Code 多供应商启动器（菜单/直达，当前终端原地启动）
+// ccp.js — Claude Code 多供应商启动器（菜单/直达，当前终端原地启动）
 //
 // 用法:
-//   cc            交互菜单选择 provider 后在当前终端启动 claude
-//   cc <名称>     直接用 ~/.claude/providers/<名称>.json 启动（如 cc glm）
-//   cc default    不带 --settings，走 cc-switch 当前全局配置
+//   ccp           交互菜单选择 provider 后在当前终端启动 claude
+//   ccp <名称>    直接用 ~/.claude/providers/<名称>.json 启动（如 ccp glm）
+//   ccp default   不带 --settings，走当前全局默认配置
 
 const fs = require('fs');
 const path = require('path');
@@ -28,7 +28,7 @@ function launch(args) {
     ? spawn([claude, ...args].join(' '), { stdio: 'inherit', shell: true })
     : spawn(claude, args, { stdio: 'inherit' });
   child.on('error', err => {
-    console.error(`cc: 找不到 claude 可执行文件（PATH 和 ~\\.local\\bin 都没有）: ${err.message}`);
+    console.error(`ccp: 找不到 claude 可执行文件（PATH 和 ~\\.local\\bin 都没有）: ${err.message}`);
     process.exit(1);
   });
   child.on('exit', (code, signal) => {
@@ -44,7 +44,7 @@ function launch(args) {
     if (pick === 'default') return launch([]);
     const f = lib.providerPath(pick);
     if (!fs.existsSync(f)) {
-      console.error(`cc: 配置不存在: ${f}`);
+      console.error(`ccp: 配置不存在: ${f}`);
       process.exit(1);
     }
     return launch(['--settings', f]);
@@ -52,11 +52,11 @@ function launch(args) {
 
   const files = lib.listProviderFiles();
   if (!files.length) {
-    console.error(`cc: 未找到 ${lib.PROVIDERS_DIR}/*.json`);
+    console.error(`ccp: 未找到 ${lib.PROVIDERS_DIR}/*.json`);
     process.exit(1);
   }
   console.log('\x1b[36m选择要使用的模型配置:\x1b[0m');
-  console.log('  0) default（cc-switch 当前全局配置）');
+  console.log('  0) default（当前全局默认配置）');
   files.forEach((f, i) => console.log(`  ${i + 1}) ${path.basename(f, '.json')}`));
 
   process.stdout.write('输入编号 [1]: ');
@@ -65,7 +65,7 @@ function launch(args) {
   let n = line.trim() || '1';
   if (n === '0') return launch([]);
   if (!/^\d+$/.test(n) || +n < 1 || +n > files.length) {
-    console.error(`cc: 无效选择: ${n}`);
+    console.error(`ccp: 无效选择: ${n}`);
     process.exit(1);
   }
   launch(['--settings', files[+n - 1]]);

@@ -5,9 +5,9 @@
 #     bash install.sh
 #
 # 会安装：
-#   1. ~/.claude/cc.js / ccm.js / ccm-page.html / cc-statusline.js / cc-usage.js / cc-lib.js
+#   1. ~/.claude/ccp.js / ccm.js / ccm-page.html / cc-statusline.js / cc-usage.js / cc-lib.js
 #   2. ~/.claude/providers/*.json          供应商配置模板（已存在的不覆盖）
-#   3. ~/.bashrc（及 zsh 用户的 ~/.zshrc）的 cc / ccm 命令（幂等，可重复执行）
+#   3. ~/.bashrc（及 zsh 用户的 ~/.zshrc）的 ccp / ccm 命令（幂等，可重复执行）
 #   4. ~/.claude/settings.json 的 statusLine 键
 #
 # 不包含：各供应商的 token（模板留占位，从旧机器拷 providers/*.json 或用 ccm 填写）
@@ -36,10 +36,10 @@ fi
 
 # 1. 核心脚本
 mkdir -p "$CLAUDE_DIR" "$PROVIDERS_DIR"
-for f in cc.js ccm.js ccm-page.html cc-statusline.js cc-usage.js cc-lib.js; do
+for f in ccp.js ccm.js ccm-page.html cc-statusline.js cc-usage.js cc-lib.js; do
     cp "$CORE_DIR/$f" "$CLAUDE_DIR/$f"
 done
-echo '[1/4] cc.js / ccm.js / cc-statusline.js / cc-usage.js 已写入 ~/.claude/'
+echo '[1/4] ccp.js / ccm.js / cc-statusline.js / cc-usage.js 已写入 ~/.claude/'
 
 # 2. providers 模板（已存在的不覆盖）
 install_template() {
@@ -89,13 +89,13 @@ install_template glm.json <<'EOF'
 EOF
 echo '[2/4] providers 目录就绪'
 
-# 3. shell 的 cc 命令（幂等：先移除旧标记块再追加）
+# 3. shell 的 ccp 命令（幂等：先移除旧标记块再追加）
 CC_BLOCK='
 # >>> cc 多供应商启动器 >>>
-# cc            交互菜单选择 provider 后在当前终端启动 claude
-# cc <名称>     直接用 ~/.claude/providers/<名称>.json 启动（如 cc glm）
-# cc default    不带 --settings，走 cc-switch 当前全局配置
-cc()  { node "$HOME/.claude/cc.js" "$@"; }
+# ccp           交互菜单选择 provider 后在当前终端启动 claude
+# ccp <名称>    直接用 ~/.claude/providers/<名称>.json 启动（如 ccp glm）
+# ccp default   不带 --settings，走当前全局默认配置
+ccp() { node "$HOME/.claude/ccp.js" "$@"; }
 # ccm — 打开供应商配置管理器（Web UI）
 ccm() { node "$HOME/.claude/ccm.js" "$@"; }
 # <<< cc 多供应商启动器 <<<'
@@ -127,14 +127,14 @@ if [ "$want_bash" -eq 1 ]; then
     if [ ! -f "$HOME/.bash_profile" ]; then
         printf '[ -f ~/.bashrc ] && . ~/.bashrc\n' > "$HOME/.bash_profile"
     fi
-    echo "[3/4] bash cc 命令已装入 ~/.bashrc"
+    echo "[3/4] bash ccp 命令已装入 ~/.bashrc"
 fi
 if [ "$want_zsh" -eq 1 ]; then
     touch "$HOME/.zshrc"
     install_rc_block "$HOME/.zshrc"
-    echo "[3/4] zsh cc 命令已装入 ~/.zshrc"
+    echo "[3/4] zsh ccp 命令已装入 ~/.zshrc"
 fi
-[ "$want_bash" -eq 0 ] && [ "$want_zsh" -eq 0 ] && echo '[3/4] 未识别到 bash/zsh，跳过（请手动在 shell 配置里加 cc/ccm 函数）'
+[ "$want_bash" -eq 0 ] && [ "$want_zsh" -eq 0 ] && echo '[3/4] 未识别到 bash/zsh，跳过（请手动在 shell 配置里加 ccp/ccm 函数）'
 
 # 4. settings.json 的 statusLine（已有则跳过）
 node -e '
@@ -154,7 +154,7 @@ console.log("[4/4] settings.json 已加 statusLine");
 echo ''
 echo '安装完成。后续步骤：'
 echo '  1. 运行 ccm 打开供应商管理器（浏览器页面），新增/编辑配置（或从旧机器拷贝 providers/*.json）'
-echo '  2. 新开终端即可用 cc / cc glm 等'
+echo '  2. 新开终端即可用 ccp / ccp glm 等'
 if [ -d "$HOME/.cc-switch" ]; then
     echo '  3. 注意：检测到 cc-switch——它会整份重写 settings.json，请把 statusLine 段加进 cc-switch 的 "Claude 通用配置"，否则切换供应商后状态栏会消失'
 fi

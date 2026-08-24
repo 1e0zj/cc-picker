@@ -9,7 +9,7 @@ cc-setup.ps1 — Claude Code 多供应商启动器 一键安装（自包含，�
   2. ~/.claude/cc-statusline.ps1        状态栏脚本
   3. ~/.claude/providers/*.json         供应商配置模板（已存在的不覆盖）
   4. 资源管理器右键菜单 "Claude Code（选模型）"
-  5. pwsh / Git Bash 的 cc 命令（幂等，可重复执行）
+  5. pwsh / Git Bash 的 ccp 命令（幂等，可重复执行）
   6. ~/.claude/settings.json 的 statusLine 键
 
 不包含：各供应商的 token（模板留占位，从旧机器拷 providers/*.json 或手动填写）
@@ -608,7 +608,7 @@ $lblTitle.Location = New-Object System.Drawing.Point((Px 20), (Px 12))
 $lblTitle.AutoSize = $true
 [void]$top.Controls.Add($lblTitle)
 $lblSubTitle = New-Object System.Windows.Forms.Label
-$lblSubTitle.Text = 'providers 配置管理 · 点击卡片编辑 · 启动用 cc / 右键菜单'
+$lblSubTitle.Text = 'providers 配置管理 · 点击卡片编辑 · 启动用 ccp / 右键菜单'
 $lblSubTitle.Font = $uiFontSub
 $lblSubTitle.ForeColor = Get-Clr $theme.sub
 $lblSubTitle.Location = New-Object System.Drawing.Point((Px 21), (Px 39))
@@ -1046,10 +1046,10 @@ try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new() } catch {}
 
 $bashCc = @'
 # >>> cc 多供应商启动器 >>>
-# cc            交互菜单选择 provider 后在当前终端启动 claude
-# cc <名称>     直接用 ~/.claude/providers/<名称>.json 启动（如 cc glm）
-# cc default    不带 --settings，走 cc-switch 当前全局配置
-cc() {
+# ccp           交互菜单选择 provider 后在当前终端启动 claude
+# ccp <名称>    直接用 ~/.claude/providers/<名称>.json 启动（如 ccp glm）
+# ccp default   不带 --settings，走当前全局默认配置
+ccp() {
   local pdir="$HOME/.claude/providers"
   local sel="$1"
   local f i n name
@@ -1061,7 +1061,7 @@ cc() {
     fi
     f="$pdir/$sel.json"
     if [ ! -f "$f" ]; then
-      echo "cc: 配置不存在: $f" >&2
+      echo "ccp: 配置不存在: $f" >&2
       return 1
     fi
     claude --settings "$f"
@@ -1073,12 +1073,12 @@ cc() {
     [ -e "$f" ] && [ "$(basename "$f" .json)" ] && files+=("$f")
   done
   if [ ${#files[@]} -eq 0 ]; then
-    echo "cc: 未找到 $pdir/*.json" >&2
+    echo "ccp: 未找到 $pdir/*.json" >&2
     return 1
   fi
 
   echo "选择要使用的模型配置:"
-  echo "  0) default（cc-switch 当前全局配置）"
+  echo "  0) default（当前全局默认配置）"
   i=1
   for f in "${files[@]}"; do
     name="$(basename "$f" .json)"
@@ -1092,7 +1092,7 @@ cc() {
     return
   fi
   if ! [[ "$n" =~ ^[0-9]+$ ]] || [ "$n" -lt 1 ] || [ "$n" -gt ${#files[@]} ]; then
-    echo "cc: 无效选择: $n" >&2
+    echo "ccp: 无效选择: $n" >&2
     return 1
   fi
   claude --settings "${files[n - 1]}"
@@ -1105,10 +1105,10 @@ ccm() { pwsh -NoProfile -File "$HOME/.claude/cc-manager.ps1" "$@"; }
 
 $pwshCc = @'
 # >>> cc 多供应商启动器 >>>
-# cc            交互菜单选择 provider 后在当前终端启动 claude
-# cc <名称>     直接用 ~/.claude/providers/<名称>.json 启动（如 cc glm）
-# cc default    不带 --settings，走 cc-switch 当前全局配置
-function cc {
+# ccp           交互菜单选择 provider 后在当前终端启动 claude
+# ccp <名称>    直接用 ~/.claude/providers/<名称>.json 启动（如 ccp glm）
+# ccp default   不带 --settings，走当前全局默认配置
+function ccp {
     param([string]$Pick)
     $providersDir = Join-Path $env:USERPROFILE '.claude\providers'
 
@@ -1124,7 +1124,7 @@ function cc {
     if ($files.Count -eq 0) { Write-Error "未找到 $providersDir\*.json"; return }
 
     Write-Host '选择要使用的模型配置:' -ForegroundColor Cyan
-    Write-Host '  0) default（cc-switch 当前全局配置）'
+    Write-Host '  0) default（当前全局默认配置）'
     for ($i = 0; $i -lt $files.Count; $i++) {
         Write-Host ('  {0}) {1}' -f ($i + 1), $files[$i].BaseName)
     }
@@ -1234,7 +1234,7 @@ $existing = ''
 if (Test-Path -LiteralPath $PROFILE) { $existing = [string](Get-Content -LiteralPath $PROFILE -Raw) }
 $existing = $existing -replace '(?s)# >>> cc 多供应商启动器 >>>.*?# <<< cc 多供应商启动器 <<<\r?\n?', ''
 Write-U8Bom $PROFILE ($existing.TrimEnd() + "`r`n`r`n" + $pwshCc.Trim() + "`r`n")
-Write-Host "[4/6] pwsh cc 命令已装入 $PROFILE"
+Write-Host "[4/6] pwsh ccp 命令已装入 $PROFILE"
 
 # 5. Git Bash 的 cc 函数（检测到 Git 才装）
 $bashrc = Join-Path $env:USERPROFILE '.bashrc'
@@ -1247,7 +1247,7 @@ if ($hasGit) {
     if (-not (Test-Path -LiteralPath $bashProfile)) {
         [IO.File]::WriteAllText($bashProfile, "# Git Bash 登录 shell 默认不读 .bashrc，这里手动加载`n[ -f ~/.bashrc ] && . ~/.bashrc`n", [Text.UTF8Encoding]::new($false))
     }
-    Write-Host '[5/6] Git Bash cc 命令已装入 ~/.bashrc'
+    Write-Host '[5/6] Git Bash ccp 命令已装入 ~/.bashrc'
 } else {
     Write-Host '[5/6] 未检测到 Git Bash，跳过（不影响右键菜单和 pwsh）'
 }
@@ -1276,7 +1276,7 @@ if (Test-Path -LiteralPath $settingsFile) {
 Write-Host ''
 Write-Host '安装完成。后续步骤：' -ForegroundColor Green
 Write-Host '  1. 运行 ccm 打开供应商管理器，新增/编辑配置（或从旧机器拷贝 providers/*.json 过来）'
-Write-Host '  2. 新开终端即可用 cc / cc glm 等；资源管理器右键 "Claude Code（选模型）"'
+Write-Host '  2. 新开终端即可用 ccp / ccp glm 等；资源管理器右键 "Claude Code（选模型）"'
 if (Test-Path (Join-Path $env:USERPROFILE '.cc-switch')) {
     Write-Host '  3. 注意：检测到 cc-switch——它会整份重写 settings.json，请把 statusLine 段加进 cc-switch 的 "Claude 通用配置"，否则切换供应商后状态栏会消失' -ForegroundColor Yellow
 }

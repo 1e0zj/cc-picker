@@ -2,7 +2,7 @@
 
 Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的模型。
 
-> **跨平台**：Windows 提供完整体验（PowerShell：含资源管理器右键菜单、终端标签着色）；macOS / Linux 提供 Node 核心版（`cc` 启动器、状态栏、Web 版 `ccm` 管理器），providers 配置两端互通。右键菜单与标签颜色为 Windows 专属功能。
+> **跨平台**：Windows 提供完整体验（PowerShell：含资源管理器右键菜单、终端标签着色）；macOS / Linux 提供 Node 核心版（`ccp` 启动器、状态栏、Web 版 `ccm` 管理器），providers 配置两端互通。右键菜单与标签颜色为 Windows 专属功能。
 
 在同一台机器上，一个终端用官方 Claude，一个用 GLM 个人号，一个用 GLM 公司号，一个用 DeepSeek……互不干扰。附带 GUI 配置管理器和账号识别状态栏。
 
@@ -26,14 +26,14 @@ Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的
 
 | 能力 | 平台 | 说明 |
 |---|:---:|---|
-| `cc` 命令 | 全平台 | 终端内菜单选供应商启动；熟练后 `cc glm`、`cc deepseek-work` 直达 |
+| `ccp` 命令 | 全平台 | 终端内菜单选供应商启动；熟练后 `ccp glm`、`ccp deepseek-work` 直达 |
 | 资源管理器右键 | Windows | 任意目录右键 →「Claude Code（选模型）」→ 弹窗选择 → 新终端窗口在该目录启动 |
 | `ccm` 管理器 | 全平台 | GUI 增删改供应商配置（cc-switch 式 JSON 直编）；GLM / DeepSeek / 官方一键预设；连通测试（发最小请求回报 HTTP 状态）；「默认」一键切换裸 `claude` 的供应商、「通用配置」直编全局 settings.json——可替代 cc-switch。Windows 为 WinForms 窗口，macOS/Linux 为浏览器页面（本地服务，仅监听 127.0.0.1） |
 | 状态栏 | 全平台 | 常驻显示 `[账号] 模型 · 目录 · 上下文% · 5h% · 周%`，用 token 反查配置文件识别账号——连裸 `claude` 都能识别当前用的哪个号 |
 | 限额显示 | 全平台 | 官方订阅读 Claude Code 自带的 rate_limits（免费实时）；GLM（5h/周）与 DeepSeek（余额）由后台查询缓存（`cc-usage`），状态栏只读缓存、过期才异步刷新，不阻塞 |
 | tab 颜色 | Windows | 按厂商归组着色，与状态栏同色：GLM 系青 / DeepSeek 系蓝 / 官方绿 / 其他黄；标题启动后由 Claude Code 接管（会话/任务状态，可用 `/rename` 命名） |
 
-Windows 支持 Git Bash 和 PowerShell 7 的 `cc` / `ccm` 命令；macOS / Linux 装入 bash / zsh。
+Windows 支持 Git Bash 和 PowerShell 7 的 `ccp` / `ccm` 命令；macOS / Linux 装入 bash / zsh。
 
 ## 快速开始
 
@@ -47,11 +47,11 @@ pwsh -ExecutionPolicy Bypass -File cc-setup.ps1
 ccm
 
 # 3. 新开终端
-cc            # 菜单选择
-cc glm        # 直达某个配置
+ccp           # 菜单选择
+ccp glm       # 直达某个配置
 ```
 
-安装包会部署：`~/.claude/cc-launch.ps1`（启动器）、`cc-manager.ps1`（管理器）、`cc-statusline.ps1`（状态栏）、`cc-usage.ps1`（限额/余额查询）、`providers/*.json`（配置模板）、右键菜单注册、`cc`/`ccm` 命令、settings.json 的 `statusLine`。
+安装包会部署：`~/.claude/cc-launch.ps1`（右键启动器）、`cc-manager.ps1`（管理器）、`cc-statusline.ps1`（状态栏）、`cc-usage.ps1`（限额/余额查询）、`providers/*.json`（配置模板）、右键菜单注册、`ccp`/`ccm` 命令、settings.json 的 `statusLine`。
 
 **macOS / Linux**（前置：已装 Claude Code；Node 18+，装 Claude Code 时通常已具备）：
 
@@ -63,11 +63,11 @@ bash install.sh
 ccm
 
 # 3. 新开终端
-cc            # 菜单选择
-cc glm        # 直达某个配置
+ccp           # 菜单选择
+ccp glm       # 直达某个配置
 ```
 
-安装包会部署：`~/.claude/cc.js`（启动器）、`ccm.js` + `ccm-page.html`（Web 管理器）、`cc-statusline.js`（状态栏）、`cc-usage.js`（限额/余额查询）、`providers/*.json`（配置模板）、bash/zsh 的 `cc`/`ccm` 函数、settings.json 的 `statusLine`。
+安装包会部署：`~/.claude/ccp.js`（启动器）、`ccm.js` + `ccm-page.html`（Web 管理器）、`cc-statusline.js`（状态栏）、`cc-usage.js`（限额/余额查询）、`providers/*.json`（配置模板）、bash/zsh 的 `ccp`/`ccm` 函数、settings.json 的 `statusLine`。
 
 ## 工作原理
 

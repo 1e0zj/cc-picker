@@ -15,7 +15,7 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
 done
 
 # 2. 脚本与缓存（providers 保留）
-rm -f "$HOME/.claude/cc.js" \
+rm -f "$HOME/.claude/ccp.js" \
       "$HOME/.claude/ccm.js" \
       "$HOME/.claude/ccm-page.html" \
       "$HOME/.claude/cc-statusline.js" \
