@@ -281,8 +281,8 @@ async function openSettingsDialog() {
   $('row-name').style.display = 'none';
   $('row-preset').style.display = 'none';
   $('f-json').value = j.text;
-  setHint('这是全局 ~/.claude/settings.json——不带 --settings 的裸 claude 读它；' +
-          '切供应商建议用卡片上的「默认」按钮（只动 env，其他键不碰）');
+  setHint('这是全局 ~/.claude/settings.json，裸启动的 claude（不带 --settings）读它；' +
+          '要切换裸 claude 用的供应商，点卡片上的「默认」按钮即可（只改 env，其他键不动）');
   $('overlay').classList.remove('hidden');
   $('f-json').focus();
 }
