@@ -110,6 +110,42 @@ function openBrowser(url) {
   } catch {}
 }
 
+// 当前默认供应商：按全局 settings.json 的 env 匹配（token 优先，其次 BASE_URL；
+// 都空 = 官方）。匹配不到供应商时返回主机名，供页脚显示
+function currentDefault(provs) {
+  const env = (lib.readSettings() || {}).env || {};
+  const tok = String(env.ANTHROPIC_AUTH_TOKEN || '');
+  const url = String(env.ANTHROPIC_BASE_URL || '');
+  if (tok) {
+    const m = provs.find(p => p.token && p.token === tok);
+    if (m) return m.name;
+  }
+  if (url) {
+    const m = provs.find(p => p.url && p.url === url);
+    if (m) return m.name;
+    return url.replace(/^https?:\/\//, '').split('/')[0];
+  }
+  return 'official';
+}
+
+// 设为默认：把供应商 env 合入全局 settings.json（仅替换 env 键，statusLine 等原样保留；
+// 空值键丢弃——官方供应商即"清空 env 回官方"）。可替代 cc-switch 的切换功能
+function setDefault(name) {
+  const sel = lib.getProviders().find(p => p.name === name);
+  if (!sel) return { error: `配置不存在: ${name}` };
+
+  const env = {};
+  for (const [k, v] of Object.entries(sel.env)) {
+    const s = String(v == null ? '' : v);
+    if (s !== '') env[k] = s;
+  }
+  const settings = lib.readSettings() || {};
+  if (Object.keys(env).length) settings.env = env;
+  else delete settings.env;   // 全空（官方）→ 清掉 env，回到官方默认
+  lib.writeSettings(settings);
+  return { ok: true };
+}
+
 // ---------- HTTP ----------
 
 const PAGE = path.join(__dirname, 'ccm-page.html');
@@ -145,15 +181,42 @@ async function handler(req, res) {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/providers') {
-      const providers = lib.getProviders().map(p => ({
+      const base = lib.getProviders();
+      const defName = currentDefault(base);
+      const providers = base.map(p => ({
         name: p.name, url: p.url, model: p.model, masked: p.masked, env: p.env,
         raw: lib.readProviderJson(p.path),
+        isDefault: p.name === defName,
       }));
-      return sendJson(res, 200, { providers, dir: lib.PROVIDERS_DIR });
+      return sendJson(res, 200, { providers, dir: lib.PROVIDERS_DIR, defaultName: defName });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/save') {
       const r = saveRaw(await readBody(req));
+      return sendJson(res, r.error ? 400 : 200, r);
+    }
+
+    // 通用配置：查看/编辑全局 settings.json
+    if (req.method === 'GET' && url.pathname === '/api/settings') {
+      const raw = fs.existsSync(lib.SETTINGS_FILE) ? lib.readTextNoBom(lib.SETTINGS_FILE) : '{}';
+      let text;
+      try { text = JSON.stringify(JSON.parse(raw), null, 2); } catch { text = raw; }
+      return sendJson(res, 200, { text, path: lib.SETTINGS_FILE });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/settings') {
+      const { text } = await readBody(req);
+      let parsed;
+      try { parsed = JSON.parse(String(text || '')); }
+      catch (e) { return sendJson(res, 400, { error: `JSON 解析失败：${e.message}` }); }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return sendJson(res, 400, { error: 'settings.json 应为 JSON 对象' });
+      }
+      lib.writeSettings(parsed);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/set-default') {
+      const r = setDefault((await readBody(req)).name);
       return sendJson(res, r.error ? 400 : 200, r);
     }
 

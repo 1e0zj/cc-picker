@@ -10,6 +10,7 @@ const os = require('os');
 const HOME = process.env.CC_HOME || os.homedir();
 const CLAUDE_DIR = path.join(HOME, '.claude');
 const PROVIDERS_DIR = path.join(CLAUDE_DIR, 'providers');
+const SETTINGS_FILE = path.join(CLAUDE_DIR, 'settings.json');
 const USAGE_CACHE = path.join(CLAUDE_DIR, 'cc-usage-cache.json');
 const USAGE_LOCK = path.join(CLAUDE_DIR, 'cc-usage.last');
 
@@ -82,7 +83,20 @@ function brandColor(p) {
   return '#F1C40F';
 }
 
+// 全局 settings.json（解析失败/不存在返回 null）
+function readSettings() {
+  try {
+    return JSON.parse(readTextNoBom(SETTINGS_FILE));
+  } catch { return null; }
+}
+
+function writeSettings(obj) {
+  fs.mkdirSync(CLAUDE_DIR, { recursive: true });
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(obj, null, 2) + '\n');
+}
+
 module.exports = {
-  HOME, CLAUDE_DIR, PROVIDERS_DIR, USAGE_CACHE, USAGE_LOCK,
-  listProviderFiles, readProviderEnv, readProviderJson, getProviders, providerPath, saveProvider, brandColor,
+  HOME, CLAUDE_DIR, PROVIDERS_DIR, SETTINGS_FILE, USAGE_CACHE, USAGE_LOCK,
+  readTextNoBom, listProviderFiles, readProviderEnv, readProviderJson, getProviders,
+  providerPath, saveProvider, brandColor, readSettings, writeSettings,
 };

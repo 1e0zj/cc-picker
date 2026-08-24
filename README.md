@@ -28,7 +28,7 @@ Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的
 |---|:---:|---|
 | `cc` 命令 | 全平台 | 终端内菜单选供应商启动；熟练后 `cc glm`、`cc deepseek-work` 直达 |
 | 资源管理器右键 | Windows | 任意目录右键 →「Claude Code（选模型）」→ 弹窗选择 → 新终端窗口在该目录启动 |
-| `ccm` 管理器 | 全平台 | GUI 增删改供应商配置；GLM / DeepSeek / 官方一键预设；连通测试（发最小请求回报 HTTP 状态）。Windows 为 WinForms 窗口，macOS/Linux 为浏览器页面（本地服务，仅监听 127.0.0.1） |
+| `ccm` 管理器 | 全平台 | GUI 增删改供应商配置（cc-switch 式 JSON 直编）；GLM / DeepSeek / 官方一键预设；连通测试（发最小请求回报 HTTP 状态）；「默认」一键切换裸 `claude` 的供应商、「通用配置」直编全局 settings.json——可替代 cc-switch。Windows 为 WinForms 窗口，macOS/Linux 为浏览器页面（本地服务，仅监听 127.0.0.1） |
 | 状态栏 | 全平台 | 常驻显示 `[账号] 模型 · 目录 · 上下文% · 5h% · 周%`，用 token 反查配置文件识别账号——连裸 `claude` 都能识别当前用的哪个号 |
 | 限额显示 | 全平台 | 官方订阅读 Claude Code 自带的 rate_limits（免费实时）；GLM（5h/周）与 DeepSeek（余额）由后台查询缓存（`cc-usage`），状态栏只读缓存、过期才异步刷新，不阻塞 |
 | tab 颜色 | Windows | 按厂商归组着色，与状态栏同色：GLM 系青 / DeepSeek 系蓝 / 官方绿 / 其他黄；标题启动后由 Claude Code 接管（会话/任务状态，可用 `/rename` 命名） |
@@ -83,13 +83,9 @@ claude --settings "C:\Users\you\.claude\providers\glm.json"
 
 ## 与 cc-switch 的关系
 
-**完全独立**，也可以共存：
+ccm 网页版自带「默认」按钮与「通用配置」编辑（macOS/Linux；Windows 版管理器暂无），**可以完全替代 cc-switch**：点卡片上的「默认」即把该供应商 env 合入全局 settings.json（只替换 env 键，`statusLine` 等其他键原样保留，比 cc-switch 整份重写更安全），裸 `claude` 随即生效。
 
-- cc-switch 管"默认"：它切换的是全局 `~/.claude/settings.json`，影响所有不带参数的裸 `claude`。
-- cc-picker 管"按需"：`cc <名称>`、右键菜单，每次启动独立生效。
-- `cc` 菜单里的 `default` = 裸 `claude` = 跟随 cc-switch 当前选择（没装 cc-switch 则是 settings.json 的静态内容）。
-
-共存时注意一条：cc-switch 切换供应商时会**整份重写** settings.json，只保留它"通用配置"里登记的顶层键——所以本项目写入的 `statusLine` 需要加进 cc-switch 的 Claude 通用配置，否则切换后状态栏会消失（安装脚本检测到 cc-switch 时会提醒）。
+若两者并存：它们都会改写 settings.json，互相覆盖——用一边就别再用另一边。cc-switch 切换时会**整份重写** settings.json，只保留它"通用配置"里登记的顶层键——所以本项目写入的 `statusLine` 需要加进 cc-switch 的 Claude 通用配置，否则切换后状态栏会消失（安装脚本检测到 cc-switch 时会提醒）。
 
 ## 多机器迁移
 
