@@ -83,7 +83,7 @@ claude --settings "C:\Users\you\.claude\providers\glm.json"
 
 ## 与 cc-switch 的关系
 
-ccm 网页版自带「默认」按钮与「通用配置」编辑（macOS/Linux；Windows 版管理器暂无），**可以完全替代 cc-switch**：点卡片上的「默认」即把该供应商 env 合入全局 settings.json（只替换 env 键，`statusLine` 等其他键原样保留，比 cc-switch 整份重写更安全），裸 `claude` 随即生效。
+ccm 网页版自带「默认」按钮与「通用配置」编辑（macOS/Linux；Windows 版管理器暂无），**可以完全替代 cc-switch**：点卡片上的「默认」即把该供应商 env **合并**进全局 settings.json——非空键覆盖、空值键清除、未提及的键保留（settings.json 里手写的通用配置不丢），`statusLine` 等其他顶层键原样保留，裸 `claude` 随即生效。官方供应商（全空模板）即"清除全部供应商键、回官方"。
 
 若两者并存：它们都会改写 settings.json，互相覆盖——用一边就别再用另一边。cc-switch 切换时会**整份重写** settings.json，只保留它"通用配置"里登记的顶层键——所以本项目写入的 `statusLine` 需要加进 cc-switch 的 Claude 通用配置，否则切换后状态栏会消失（安装脚本检测到 cc-switch 时会提醒）。
 

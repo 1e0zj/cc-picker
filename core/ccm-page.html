@@ -233,7 +233,7 @@ async function reload() {
       `<div class="acts">` +
         `<button data-act="edit">编辑</button>` +
         `<button data-act="test">测试</button>` +
-        `<button data-act="default" title="设为裸 claude 的默认配置">默认</button>` +
+        `<button data-act="default" title="设为裸 claude 的默认供应商（合并 env：未提及的键保留）">默认</button>` +
         `<button data-act="del" class="danger">删除</button>` +
       `</div>`;
     card.addEventListener('click', e => {
@@ -282,7 +282,7 @@ async function openSettingsDialog() {
   $('row-preset').style.display = 'none';
   $('f-json').value = j.text;
   setHint('这是全局 ~/.claude/settings.json，裸启动的 claude（不带 --settings）读它；' +
-          '要切换裸 claude 用的供应商，点卡片上的「默认」按钮即可（只改 env，其他键不动）');
+          '切换裸 claude 的供应商用卡片「默认」按钮：合并 env——非空键覆盖、空值键清除、未提及的键保留（通用配置不丢）');
   $('overlay').classList.remove('hidden');
   $('f-json').focus();
 }

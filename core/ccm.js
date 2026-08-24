@@ -128,20 +128,23 @@ function currentDefault(provs) {
   return 'official';
 }
 
-// 设为默认：把供应商 env 合入全局 settings.json（仅替换 env 键，statusLine 等原样保留；
-// 空值键丢弃——官方供应商即"清空 env 回官方"）。可替代 cc-switch 的切换功能
+// 设为默认：把供应商 env 合入全局 settings.json（statusLine 等其他顶层键原样保留）。
+// 合并语义——通用配置（settings.json env 里手写的键）不被覆盖：
+//   非空值 = 覆盖/写入；空值 = 清除该键；未提及的键 = 保留原值。
+// 官方模板全部为空值 → 点它即清掉所有供应商键，回到官方。可替代 cc-switch 的切换功能。
 function setDefault(name) {
   const sel = lib.getProviders().find(p => p.name === name);
   if (!sel) return { error: `配置不存在: ${name}` };
 
-  const env = {};
-  for (const [k, v] of Object.entries(sel.env)) {
-    const s = String(v == null ? '' : v);
-    if (s !== '') env[k] = s;
-  }
   const settings = lib.readSettings() || {};
+  const env = { ...(settings.env || {}) };   // 以现有 env 为底
+  for (const [k, v] of Object.entries(sel.env)) {
+    const s = String(v == null ? '' : v).trim();
+    if (s === '') delete env[k];
+    else env[k] = s;
+  }
   if (Object.keys(env).length) settings.env = env;
-  else delete settings.env;   // 全空（官方）→ 清掉 env，回到官方默认
+  else delete settings.env;
   lib.writeSettings(settings);
   return { ok: true };
 }
