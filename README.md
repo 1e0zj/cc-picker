@@ -6,6 +6,22 @@ Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的
 
 在同一台机器上，一个终端用官方 Claude，一个用 GLM 个人号，一个用 GLM 公司号，一个用 DeepSeek……互不干扰。附带 GUI 配置管理器和账号识别状态栏。
 
+## 界面预览
+
+| `ccm` 管理器 | 新增供应商 |
+|:---:|:---:|
+| ![ccm 管理器：卡片式供应商列表，编辑 / 测试 / 删除](docs/manager.png) | ![新增供应商：官方 / GLM / DeepSeek 一键预设](docs/provider-edit.png) |
+
+| 资源管理器右键 | 选模型弹窗 |
+|:---:|:---:|
+| ![资源管理器右键菜单](docs/context-menu.png) | ![右键菜单弹出的选模型窗口](docs/picker.png) |
+
+状态栏常驻显示 `[账号] 模型 · 目录 · 上下文%`，终端标签按厂商着色（下图均为 GLM 会话）：
+
+![状态栏：[glm] glm-5.3[1m] · cc-picker · ctx 0%](docs/statusline.png)
+
+![终端标签按厂商着色](docs/tabs.png)
+
 ## 功能
 
 | 能力 | 说明 |
