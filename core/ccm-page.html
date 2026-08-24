@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code 供应商管理</title>
+<style>
+  /* 配色与 Windows 版 cc-manager.ps1 完全一致（浅色卡片 / 跟随系统深浅色） */
+  :root {
+    --bg: #F3F4F6; --card: #FFFFFF; --border: #E3E5EA; --text: #1F2328; --sub: #71767F;
+    --inputBg: #FFFFFF; --inputBorder: #D9DDE3; --chipBg: #ECEEF2; --chipHover: #E0E3E9;
+    --accent: #3B82F6; --accentHover: #2F76E4; --onAccent: #FFFFFF;
+    --orange: #F97316; --orangeHover: #EA580C;
+    --green: #10B981; --red: #EF4444; --redHover: #DC2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1D1E22; --card: #26282E; --border: #3A3D45; --text: #E6E8EC; --sub: #9CA3AF;
+      --inputBg: #17181C; --inputBorder: #4A4E59; --chipBg: #33353D; --chipHover: #3E414A;
+      --accent: #4C8DFF; --accentHover: #6AA1FF; --onAccent: #0B1220;
+      --orange: #FB923C; --orangeHover: #FDBA74;
+      --green: #34D399; --red: #F87171; --redHover: #FCA5A5;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 13px; overflow: hidden;
+  }
+
+  /* 顶栏 */
+  header {
+    flex: none; display: flex; align-items: center; height: 64px;
+    padding: 0 20px; border-bottom: 1px solid var(--border);
+  }
+  header .titles { margin-right: auto; }
+  h1 { font-size: 20px; font-weight: 600; }
+  .subtitle { font-size: 12.5px; color: var(--sub); margin-top: 3px; }
+
+  /* 按钮体系（对应 WinForms 的 ghost / primary / orange / danger 四种） */
+  button {
+    font-family: inherit; font-size: 13px; border: none; border-radius: 6px;
+    padding: 0 14px; height: 32px; cursor: pointer; white-space: nowrap;
+    background: var(--chipBg); color: var(--text);
+  }
+  button:hover { background: var(--chipHover); }
+  button.primary { background: var(--accent); color: var(--onAccent); }
+  button.primary:hover { background: var(--accentHover); }
+  button.orange { background: var(--orange); color: #fff; }
+  button.orange:hover { background: var(--orangeHover); }
+  button.danger:hover { background: var(--redHover); color: #fff; }
+  .btn-gap { margin-left: 10px; }
+
+  /* 卡片列表 */
+  main { flex: 1; overflow-y: auto; padding: 8px 18px; }
+  .card {
+    display: flex; align-items: center; padding: 20px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 16px; cursor: pointer; user-select: none;
+  }
+  .card:hover { border-color: var(--accent); }
+  .icon {
+    flex: none; width: 44px; height: 44px; margin-right: 16px;
+    border-radius: 10px; color: #fff; font-size: 19px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .info { min-width: 0; }
+  .name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .meta, .tok {
+    font-size: 12.5px; color: var(--sub);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 480px;
+  }
+  .acts { margin-left: auto; display: flex; gap: 6px; }
+  .acts button { width: 56px; height: 28px; padding: 0; font-size: 12.5px; }
+  .empty { color: var(--sub); font-size: 12.5px; padding: 26px 4px; }
+
+  /* 底部状态条 */
+  footer {
+    flex: none; display: flex; align-items: center; height: 34px;
+    padding: 0 20px; border-top: 1px solid var(--border);
+    font-size: 12.5px; color: var(--sub);
+  }
+  footer .status { margin-right: auto; }
+  footer .status.ok { color: var(--green); }
+  footer .status.bad { color: var(--red); }
+
+  /* 编辑/新增对话框 */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.35);
+    display: flex; align-items: flex-start; justify-content: center;
+    overflow-y: auto; padding: 6vh 16px; z-index: 10;
+  }
+  .overlay.hidden { display: none; }
+  dialog {
+    width: 540px; max-width: 100%; background: var(--bg); color: var(--text);
+    border: none; border-radius: 10px; padding: 24px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.25);
+  }
+  dialog h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+  .preset-row { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+  .preset-row .lbl { font-size: 12.5px; color: var(--sub); }
+  .preset-row button { height: 32px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12.5px; color: var(--sub); margin-bottom: 5px; }
+  .field input {
+    width: 100%; height: 44px; padding: 0 12px;
+    background: var(--inputBg); border: 1px solid var(--inputBorder); border-radius: 8px;
+    color: var(--text); font-family: inherit; font-size: 14px; outline: none;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .adv {
+    background: var(--chipBg); border-radius: 10px; padding: 14px; margin: 16px 0 0;
+  }
+  .adv > label { display: block; font-size: 12.5px; color: var(--sub); margin-bottom: 12px; }
+  .adv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .adv-grid .field { margin-bottom: 0; }
+  .adv-grid input { height: 38px; }
+  .dlg-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+  .dlg-foot button { width: 96px; height: 34px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="titles">
+    <h1>Claude Code 供应商</h1>
+    <div class="subtitle">providers 配置管理 · 点击卡片编辑 · 启动用 cc / 右键菜单</div>
+  </div>
+  <button id="btn-folder">打开目录</button>
+  <button id="btn-add" class="orange btn-gap">＋ 新增供应商</button>
+</header>
+
+<main id="list"></main>
+
+<footer>
+  <span class="status" id="status"></span>
+  <span id="dir"></span>
+</footer>
+
+<!-- 编辑/新增对话框 -->
+<div class="overlay hidden" id="overlay">
+  <dialog open>
+    <h2 id="dlg-title">新增供应商</h2>
+    <div class="preset-row">
+      <span class="lbl">快速预设：</span>
+      <button data-preset="official">官方</button>
+      <button data-preset="glm">GLM</button>
+      <button data-preset="deepseek">DeepSeek</button>
+    </div>
+    <div class="field"><label>名称</label><input id="f-name" placeholder="英文/数字/-/_，如 glm"></div>
+    <div class="field"><label>接口地址</label><input id="f-url" placeholder="https://…（官方留空）"></div>
+    <div class="field"><label>Token</label><input id="f-token" placeholder="ANTHROPIC_AUTH_TOKEN（sk-…）"></div>
+    <div class="field"><label>主模型</label><input id="f-model" placeholder="如 glm-5.3[1M]"></div>
+    <div class="adv">
+      <label>高级 — 档位映射与超时（可留空）</label>
+      <div class="adv-grid">
+        <div class="field"><label>HAIKU 映射</label><input id="f-haiku"></div>
+        <div class="field"><label>OPUS 映射</label><input id="f-opus"></div>
+        <div class="field"><label>SONNET 映射</label><input id="f-sonnet"></div>
+        <div class="field"><label>FABLE 映射</label><input id="f-fable"></div>
+        <div class="field"><label>API_TIMEOUT_MS</label><input id="f-timeout"></div>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button id="btn-cancel">取消</button>
+      <button id="btn-save" class="primary">保存</button>
+    </div>
+  </dialog>
+</div>
+
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+let providers = [];
+let editing = null;   // null = 新增；对象 = 编辑（含原始 env）
+
+// 厂商主色：与 wt tab / 状态栏配色一致（glm 系=青，deepseek 系=蓝，官方=绿，其余=黄）
+function brandColor(p) {
+  if (!p.url) return '#2ECC71';
+  if (/^glm/i.test(p.name)) return '#00B8A9';
+  if (/^deepseek/i.test(p.name)) return '#4D6FFF';
+  return '#F1C40F';
+}
+const initial = name => name.charAt(0).toUpperCase();
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function api(path, body) {
+  const resp = await fetch(path, body == null ? {} : {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(j.error || ('HTTP ' + resp.status));
+  return j;
+}
+
+function setStatus(msg, cls) {
+  const el = $('status');
+  el.textContent = msg || '';
+  el.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+async function reload() {
+  const j = await api('/api/providers');
+  providers = j.providers;
+  $('dir').textContent = '目录: ' + j.dir;
+  const list = $('list');
+  list.innerHTML = '';
+  if (!providers.length) {
+    list.innerHTML = '<div class="empty">暂无配置 — 点右上「＋ 新增供应商」创建</div>';
+    return;
+  }
+  for (const p of providers) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML =
+      `<div class="icon" style="background:${brandColor(p)}">${esc(initial(p.name))}</div>` +
+      `<div class="info">` +
+        `<div class="name">${esc(p.name)}</div>` +
+        `<div class="meta">${p.url ? esc(p.url) : '官方 API'} &nbsp;·&nbsp; ${esc(p.model)}</div>` +
+        `<div class="tok">Token: ${esc(p.masked)}</div>` +
+      `</div>` +
+      `<div class="acts">` +
+        `<button data-act="edit">编辑</button>` +
+        `<button data-act="test">测试</button>` +
+        `<button data-act="del" class="danger">删除</button>` +
+      `</div>`;
+    card.addEventListener('click', e => {
+      const act = e.target.closest('button')?.dataset.act;
+      if (act === 'test') return testProvider(p.name);
+      if (act === 'del') return delProvider(p.name);
+      openDialog(p);   // 点卡片任意处 = 编辑
+    });
+    list.appendChild(card);
+  }
+}
+
+// ---------- 对话框 ----------
+
+function openDialog(p) {
+  editing = p || null;
+  $('dlg-title').textContent = editing ? '编辑 — ' + editing.name : '新增供应商';
+  const env = (editing && editing.env) || {};
+  $('f-name').value    = editing ? editing.name : '';
+  $('f-url').value     = env.ANTHROPIC_BASE_URL || '';
+  $('f-token').value   = env.ANTHROPIC_AUTH_TOKEN || '';
+  $('f-model').value   = env.ANTHROPIC_MODEL || '';
+  $('f-haiku').value   = env.ANTHROPIC_DEFAULT_HAIKU_MODEL || '';
+  $('f-opus').value    = env.ANTHROPIC_DEFAULT_OPUS_MODEL || '';
+  $('f-sonnet').value  = env.ANTHROPIC_DEFAULT_SONNET_MODEL || '';
+  $('f-fable').value   = env.ANTHROPIC_DEFAULT_FABLE_MODEL || '';
+  $('f-timeout').value = env.API_TIMEOUT_MS || '';
+  $('overlay').classList.remove('hidden');
+  $('f-name').focus();
+}
+function closeDialog() { $('overlay').classList.add('hidden'); }
+
+// 预设（FABLE 映射对齐 providers 模板：GLM=glm-5.3[1M]，DeepSeek 同 OPUS）
+document.querySelectorAll('[data-preset]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const set = (url, model, haiku, opus, sonnet, fable, timeout) => {
+      $('f-url').value = url; $('f-model').value = model;
+      $('f-haiku').value = haiku; $('f-opus').value = opus;
+      $('f-sonnet').value = sonnet; $('f-fable').value = fable;
+      $('f-timeout').value = timeout;
+      if (url) $('f-token').focus();
+    };
+    switch (btn.dataset.preset) {
+      case 'official': set('', '', '', '', '', '', ''); break;
+      case 'glm':
+        set('https://open.bigmodel.cn/api/anthropic', 'glm-5.3[1M]',
+            'glm-5.3', 'glm-5.3[1M]', 'glm-5.3[1M]', 'glm-5.3[1M]', '3000000'); break;
+      case 'deepseek':
+        set('https://api.deepseek.com/anthropic', 'deepseek-v4-pro',
+            'deepseek-v4-flash', 'deepseek-v4-pro[1M]', 'deepseek-v4-pro', 'deepseek-v4-pro[1M]', '3000000'); break;
+    }
+  });
+});
+
+async function save() {
+  try {
+    await api('/api/save', {
+      oldName: editing ? editing.name : null,
+      rawEnv: (editing && editing.env) ? { ...editing.env } : {},
+      name:    $('f-name').value,
+      url:     $('f-url').value,
+      token:   $('f-token').value,
+      model:   $('f-model').value,
+      haiku:   $('f-haiku').value,
+      opus:    $('f-opus').value,
+      sonnet:  $('f-sonnet').value,
+      fable:   $('f-fable').value,
+      timeout: $('f-timeout').value,
+    });
+    closeDialog();
+    await reload();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function delProvider(name) {
+  if (!confirm(`确定删除 ${name} ？`)) return;
+  await api('/api/delete', { name });
+  await reload();
+}
+
+async function testProvider(name) {
+  setStatus(`正在测试 ${name} …`);
+  const { msg } = await api('/api/test', { name });
+  setStatus(`${name}: ${msg}`, /不可达/.test(msg) ? 'bad' : /HTTP/.test(msg) ? 'ok' : '');
+}
+
+// ---------- 事件绑定 ----------
+
+$('btn-add').addEventListener('click', () => openDialog(null));
+$('btn-cancel').addEventListener('click', closeDialog);
+$('btn-save').addEventListener('click', save);
+$('overlay').addEventListener('mousedown', e => { if (e.target === $('overlay')) closeDialog(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDialog(); });
+$('btn-folder').addEventListener('click', () => api('/api/open-folder'));
+$('f-name').addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+
+reload();
+</script>
+</body>
+</html>
