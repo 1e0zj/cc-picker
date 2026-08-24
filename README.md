@@ -2,6 +2,8 @@
 
 Claude Code 多供应商启动器 —— 单文件安装，多终端各用各的模型。
 
+> **Windows 专用项目**：安装脚本、右键菜单、GUI 管理器全部基于 PowerShell / Windows Terminal 实现，仅支持 Windows 10/11，不支持 macOS / Linux。
+
 在同一台机器上，一个终端用官方 Claude，一个用 GLM 个人号，一个用 GLM 公司号，一个用 DeepSeek……互不干扰。附带 GUI 配置管理器和账号识别状态栏。
 
 ## 功能
