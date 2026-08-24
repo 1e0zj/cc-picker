@@ -122,6 +122,23 @@ bash uninstall.sh   # 清理脚本、缓存、shell 函数与 statusLine；provi
 - **状态栏的限额（5h/周）哪来的？** 官方订阅：Claude Code 传给状态栏的 JSON 自带 `rate_limits`（5 小时 + 7 天窗口），直接显示。GLM：`cc-usage.ps1` 调智谱限额接口把结果缓存到 `~/.claude/cc-usage-cache.json`，状态栏读缓存显示，超过 10 分钟触发后台异步刷新（2 分钟防抖）——状态栏本身从不发网络请求，不会拖慢刷新。DeepSeek 显示账户余额（¥）。智谱接口另返回的 TIME_LIMIT 是附加产品（搜索/网页阅读等）的月度量，与模型调用限额无关，不显示；各账号有几档显示几档。
 - **在盘符根目录右键报“目录不存在”？** 旧版本问题（`"C:\"` 的 `\"` 被解析成转义引号），已修复。
 
+## 开发与发布
+
+发布走 GitHub Actions：推一个 `v*` tag，[release.yml](.github/workflows/release.yml) 完成 版本校验 → 沙箱验证 → npm publish。
+
+```bash
+npm version patch        # 自动改 package.json + 打 tag + 提交（minor/major 同理）
+git push --follow-tags
+```
+
+发布用 npm **trusted publishing**（OIDC）：仓库不存任何 npm token，GitHub 签发短时身份令牌完成发布，provenance 自动生成。**首次启用需要一次性配置**——
+
+1. 用你的账号手动发布第一版：`npm login && npm publish`
+2. npmjs.com 包页 → Settings → Trusted Publishers → 添加 `1e0zj/cc-picker`（workflow 填 `release.yml`）
+3. 之后每次 `npm version` + 推 tag 即自动发布
+
+（配置完成前推 tag 会在最后一步失败，无害，配好后重跑 workflow 即可。）
+
 ## License
 
 [MIT](LICENSE)

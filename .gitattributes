@@ -3,6 +3,7 @@
 # bin/ 与 package.json 也必须 LF——否则 Windows 上 npm publish 打出的包
 # 会让 unix 用户的 shebang 带 \r 而无法执行
 *.sh text eol=lf
+*.yml text eol=lf
 core/** text eol=lf
 bin/** text eol=lf
 package.json text eol=lf

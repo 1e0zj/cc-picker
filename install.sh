@@ -116,8 +116,8 @@ want_zsh=0
 [ -f "$HOME/.bashrc" ] && want_bash=1
 [ -f "$HOME/.zshrc" ] && want_zsh=1
 case "${SHELL:-}" in
-    */bash) want_bash=1 ;;
-    */zsh)  want_zsh=1 ;;
+    *bash*) want_bash=1 ;;   # 包含匹配：Git Bash 的 SHELL 是 /bin/bash.exe
+    *zsh*)  want_zsh=1 ;;
 esac
 
 if [ "$want_bash" -eq 1 ]; then

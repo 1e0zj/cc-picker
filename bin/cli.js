@@ -123,8 +123,9 @@ function install() {
   let wantBash = fs.existsSync(path.join(HOME, '.bashrc'));
   let wantZsh = fs.existsSync(path.join(HOME, '.zshrc'));
   const shell = process.env.SHELL || '';
-  if (/bash$/.test(shell)) wantBash = true;
-  if (/zsh$/.test(shell)) wantZsh = true;
+  // 包含匹配而非结尾匹配：Git Bash 的 SHELL 是 /bin/bash.exe（带 .exe）
+  if (/bash/.test(shell)) wantBash = true;
+  if (/zsh/.test(shell)) wantZsh = true;
 
   if (wantBash) {
     installRc(path.join(HOME, '.bashrc'));

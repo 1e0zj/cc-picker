@@ -1,0 +1,73 @@
+# 发布：推一个 v* tag，其余自动。
+#
+# 用 npm trusted publishing（OIDC）——仓库里不存任何 npm 凭据，也没有会过期
+# 需要轮换的东西。GitHub 签发一个几分钟就失效的身份令牌，npm 用它换发布权限，
+# provenance 顺带自动生成（tarball 哈希 ↔ 源 commit ↔ workflow 签名绑定）。
+#
+# 首次启用需一次性配置：npmjs.com 包页 Settings → Trusted Publishers
+# 添加本仓库（workflow: release.yml）。见 README「开发与发布」。
+name: Publish
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  id-token: write # trusted publishing 的唯一硬要求
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          # trusted publishing 要求 node >= 22.14.0 / npm >= 11.5.1
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      # 零运行时依赖、无构建步骤，npm publish 也不读 node_modules——不需要 npm ci。
+
+      - name: tag 与 package.json 版本必须一致
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag v$TAG 与 package.json 的 $PKG 不一致，拒绝发布"
+            exit 1
+          fi
+          echo "版本一致：$PKG"
+
+      # 全套验证跑在临时 HOME 沙箱（CC_HOME），不触碰 runner 环境：
+      # 语法检查 → install 部署 → settings.json 合并 → 状态栏冒烟 →
+      # ccp 报错路径 → status → uninstall 干净回收。
+      - name: 沙箱验证
+        run: |
+          set -e
+          for f in bin/cli.js core/ccp.js core/ccm.js core/cc-statusline.js core/cc-usage.js core/cc-lib.js; do
+            node --check "$f"
+          done
+          SB="$(mktemp -d)"
+          export HOME="$SB" CC_HOME="$SB" SHELL=/bin/bash
+          node bin/cli.js install
+          test -f "$SB/.claude/ccp.js" && test -f "$SB/.claude/cc-statusline.js"
+          grep -q 'ccp()' "$SB/.bashrc"
+          node -e 'const j=require(process.env.CC_HOME+"/.claude/settings.json");
+                   process.exit(j.statusLine && j.statusLine.command.includes("cc-statusline") ? 0 : 1)'
+          printf '%s' '{"model":{"display_name":"X"},"workspace":{"current_dir":"/p"},"context_window":{"used_percentage":1}}' \
+            | node "$SB/.claude/cc-statusline.js" | grep -q 'ctx'
+          if echo 99 | node "$SB/.claude/ccp.js" >/dev/null 2>&1; then
+            echo "::error::无效选择应当非零退出"; exit 1
+          fi
+          node bin/cli.js status >/dev/null
+          node bin/cli.js uninstall
+          test ! -f "$SB/.claude/ccp.js"
+          node -e 'const j=require(process.env.CC_HOME+"/.claude/settings.json");
+                   process.exit(!("statusLine" in j) ? 0 : 1)'
+          echo "沙箱验证通过"
+
+      - name: 发布（无 token，provenance 自动生成）
+        run: npm publish --access public
