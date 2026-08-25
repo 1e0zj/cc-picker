@@ -1,6 +1,6 @@
 'use strict';
 // cc-lib.js — cc 系列 Node 脚本的共享库（providers 读写、路径、厂商配色）
-// 与 Windows 版 cc-setup.ps1 的行为保持一致，providers/*.json 两端互通。
+// providers/*.json 与旧 PowerShell 版格式互通，老机器上的配置直接可用。
 
 const fs = require('fs');
 const path = require('path');
@@ -24,7 +24,14 @@ function listProviderFiles() {
     .map(f => path.join(PROVIDERS_DIR, f));
 }
 
-// 读文件文本并剥掉 UTF-8 BOM——Windows 版 cc-setup.ps1 写的 providers 全带 BOM，
+// 右键菜单传来的路径要清洗：Windows 注册表的 %1/%V 在盘根目录展开成 "C:\"，
+// 尾部反斜杠把结束引号吃掉，程序实际收到 C:" ——剥引号，裸盘符补回反斜杠
+function normalizeDir(raw) {
+  const d = String(raw || '').trim().replace(/^"+|"+$/g, '');
+  return /^[A-Za-z]:$/.test(d) ? d + '\\' : d;
+}
+
+// 读文件文本并剥掉 UTF-8 BOM——旧 PowerShell 版写的 providers 全带 BOM，
 // JSON.parse 不认 BOM 前缀，不剥的话 token 匹配 / 卡片 / 编辑回显全部失效
 function readTextNoBom(file) {
   const s = fs.readFileSync(file, 'utf8');
@@ -67,7 +74,7 @@ function getProviders() {
   });
 }
 
-// 保存：{ env: {...} }，UTF-8 无 BOM（Windows 版 pwsh 读取同样兼容）
+// 保存：{ env: {...} }，UTF-8 无 BOM（旧 PowerShell 版读取同样兼容）
 function saveProvider(name, env) {
   fs.mkdirSync(PROVIDERS_DIR, { recursive: true });
   const file = providerPath(name);
@@ -98,5 +105,5 @@ function writeSettings(obj) {
 module.exports = {
   HOME, CLAUDE_DIR, PROVIDERS_DIR, SETTINGS_FILE, USAGE_CACHE, USAGE_LOCK,
   readTextNoBom, listProviderFiles, readProviderEnv, readProviderJson, getProviders,
-  providerPath, saveProvider, brandColor, readSettings, writeSettings,
+  providerPath, saveProvider, brandColor, readSettings, writeSettings, normalizeDir,
 };

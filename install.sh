@@ -5,14 +5,24 @@
 #     bash install.sh
 #
 # 会安装：
-#   1. ~/.claude/ccp.js / ccm.js / ccm-page.html / cc-statusline.js / cc-usage.js / cc-lib.js
+#   1. ~/.claude/ccp.js / ccm.js / ccm-page.html / cc-statusline.js / cc-usage.js / cc-lib.js / cc-menu.js
 #   2. ~/.claude/providers/*.json          供应商配置模板（已存在的不覆盖）
 #   3. ~/.bashrc（及 zsh 用户的 ~/.zshrc）的 ccp / ccm 命令（幂等，可重复执行）
 #   4. ~/.claude/settings.json 的 statusLine 键
+#   5. Finder 右键的「快速操作」（仅 macOS；--no-menu 跳过）
 #
 # 不包含：各供应商的 token（模板留占位，从旧机器拷 providers/*.json 或用 ccm 填写）
 
 set -euo pipefail
+
+# 参数：--no-menu 跳过文件管理器右键菜单（默认装）
+WITH_MENU=1
+for arg in "$@"; do
+    case "$arg" in
+        --no-menu) WITH_MENU=0 ;;
+        *) echo "未知参数: $arg（用法: bash install.sh [--no-menu]）" >&2; exit 1 ;;
+    esac
+done
 
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CORE_DIR="$SRC_DIR/core"
@@ -36,10 +46,10 @@ fi
 
 # 1. 核心脚本
 mkdir -p "$CLAUDE_DIR" "$PROVIDERS_DIR"
-for f in ccp.js ccm.js ccm-page.html cc-statusline.js cc-usage.js cc-lib.js; do
+for f in ccp.js ccm.js ccm-page.html cc-statusline.js cc-usage.js cc-lib.js cc-menu.js; do
     cp "$CORE_DIR/$f" "$CLAUDE_DIR/$f"
 done
-echo '[1/4] ccp.js / ccm.js / cc-statusline.js / cc-usage.js 已写入 ~/.claude/'
+echo '[1/5] ccp.js / ccm.js / cc-statusline.js / cc-usage.js 已写入 ~/.claude/'
 
 # 2. providers 模板（已存在的不覆盖）
 install_template() {
@@ -87,7 +97,7 @@ install_template glm.json <<'EOF'
   }
 }
 EOF
-echo '[2/4] providers 目录就绪'
+echo '[2/5] providers 目录就绪'
 
 # 3. shell 的 ccp 命令（幂等：先移除旧标记块再追加）
 CC_BLOCK='
@@ -127,34 +137,47 @@ if [ "$want_bash" -eq 1 ]; then
     if [ ! -f "$HOME/.bash_profile" ]; then
         printf '[ -f ~/.bashrc ] && . ~/.bashrc\n' > "$HOME/.bash_profile"
     fi
-    echo "[3/4] bash ccp 命令已装入 ~/.bashrc"
+    echo "[3/5] bash ccp 命令已装入 ~/.bashrc"
 fi
 if [ "$want_zsh" -eq 1 ]; then
     touch "$HOME/.zshrc"
     install_rc_block "$HOME/.zshrc"
-    echo "[3/4] zsh ccp 命令已装入 ~/.zshrc"
+    echo "[3/5] zsh ccp 命令已装入 ~/.zshrc"
 fi
-[ "$want_bash" -eq 0 ] && [ "$want_zsh" -eq 0 ] && echo '[3/4] 未识别到 bash/zsh，跳过（请手动在 shell 配置里加 ccp/ccm 函数）'
+[ "$want_bash" -eq 0 ] && [ "$want_zsh" -eq 0 ] && echo '[3/5] 未识别到 bash/zsh，跳过（请手动在 shell 配置里加 ccp/ccm 函数）'
 
 # 4. settings.json 的 statusLine（已有则跳过）
 node -e '
 const fs = require("fs");
 const p = process.env.HOME + "/.claude/settings.json";
-if (!fs.existsSync(p)) { console.log("[4/4] 未找到 ~/.claude/settings.json，跳过 statusLine"); process.exit(0); }
+if (!fs.existsSync(p)) { console.log("[4/5] 未找到 ~/.claude/settings.json，跳过 statusLine"); process.exit(0); }
 let j;
 try { j = JSON.parse(fs.readFileSync(p, "utf8")); }
-catch { console.log("[4/4] settings.json 解析失败，跳过 statusLine"); process.exit(0); }
-if (j.statusLine) { console.log("[4/4] settings.json 已有 statusLine，跳过"); process.exit(0); }
+catch { console.log("[4/5] settings.json 解析失败，跳过 statusLine"); process.exit(0); }
+if (j.statusLine) { console.log("[4/5] settings.json 已有 statusLine，跳过"); process.exit(0); }
 j.statusLine = { type: "command", command: "node " + process.env.HOME + "/.claude/cc-statusline.js" };
 fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
-console.log("[4/4] settings.json 已加 statusLine");
+console.log("[4/5] settings.json 已加 statusLine");
 '
+
+# 5. 文件管理器右键菜单（macOS 默认装；Linux 各文件管理器机制不同，没有实现）
+if [ "$(uname -s)" != "Darwin" ]; then
+    echo '[5/5] 当前平台没有右键菜单实现，跳过'
+elif [ "$WITH_MENU" -eq 0 ]; then
+    echo '[5/5] --no-menu：跳过右键菜单（以后想要: node ~/.claude/cc-menu.js install）'
+else
+    printf '[5/5] '
+    node "$CLAUDE_DIR/cc-menu.js" install || echo '      右键菜单安装失败（不影响其他部分）'
+fi
 
 # ============ 摘要 ============
 echo ''
 echo '安装完成。后续步骤：'
 echo '  1. 运行 ccm 打开供应商管理器（浏览器页面），新增/编辑配置（或从旧机器拷贝 providers/*.json）'
 echo '  2. 新开终端即可用 ccp / ccp glm 等'
+if [ "$(uname -s)" = "Darwin" ] && [ "$WITH_MENU" -eq 1 ]; then
+    echo '  3. Finder 里右键文件夹 →「快速操作」→「Claude Code（选模型）」也能启动；不想要: node ~/.claude/cc-menu.js uninstall'
+fi
 if [ -d "$HOME/.cc-switch" ]; then
-    echo '  3. 注意：检测到 cc-switch——它会整份重写 settings.json，请把 statusLine 段加进 cc-switch 的 "Claude 通用配置"，否则切换供应商后状态栏会消失'
+    echo '  注意：检测到 cc-switch——它会整份重写 settings.json，请把 statusLine 段加进 cc-switch 的 "Claude 通用配置"，否则切换供应商后状态栏会消失'
 fi

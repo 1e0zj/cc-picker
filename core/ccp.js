@@ -6,6 +6,7 @@
 //   ccp           交互菜单选择 provider 后在当前终端启动 claude
 //   ccp <名称>    直接用 ~/.claude/providers/<名称>.json 启动（如 ccp glm）
 //   ccp default   不带 --settings，走当前全局默认配置
+//   ccp --dir <路径> [名称]   先切到该目录再启动（文件管理器右键菜单用，见 cc-menu.js）
 
 const fs = require('fs');
 const path = require('path');
@@ -38,7 +39,16 @@ function launch(args) {
 }
 
 (async () => {
-  const pick = process.argv[2];
+  const argv = process.argv.slice(2);
+  const di = argv.indexOf('--dir');
+  if (di >= 0) {
+    const dir = lib.normalizeDir(argv[di + 1]);
+    argv.splice(di, 2);
+    // 进不去就留在当前目录继续——比直接退出有用（右键窗口里还能自己 cd）
+    try { process.chdir(dir); }
+    catch (e) { console.error(`ccp: 无法进入目录 ${dir}（${e.message}），改在当前目录启动`); }
+  }
+  const pick = argv[0];
 
   if (pick) {
     if (pick === 'default') return launch([]);

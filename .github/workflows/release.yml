@@ -48,13 +48,13 @@ jobs:
         run: |
           set -e
           npm test
-          for f in bin/cli.js core/ccp.js core/ccm.js core/cc-statusline.js core/cc-usage.js core/cc-lib.js; do
+          for f in bin/cli.js core/ccp.js core/ccm.js core/cc-statusline.js core/cc-usage.js core/cc-lib.js core/cc-menu.js; do
             node --check "$f"
           done
           SB="$(mktemp -d)"
           export HOME="$SB" CC_HOME="$SB" SHELL=/bin/bash
           node bin/cli.js install
-          test -f "$SB/.claude/ccp.js" && test -f "$SB/.claude/cc-statusline.js"
+          test -f "$SB/.claude/ccp.js" && test -f "$SB/.claude/cc-statusline.js" && test -f "$SB/.claude/cc-menu.js"
           grep -q 'ccp()' "$SB/.bashrc"
           node -e 'const j=require(process.env.CC_HOME+"/.claude/settings.json");
                    process.exit(j.statusLine && j.statusLine.command.includes("cc-statusline") ? 0 : 1)'

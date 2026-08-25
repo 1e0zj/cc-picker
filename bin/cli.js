@@ -4,9 +4,12 @@
 //
 // 用法:
 //   cc-picker            安装（= install；npx 一次装的默认动作）
-//   cc-picker install    部署核心脚本到 ~/.claude、写 shell 的 ccp/ccm 函数、配 statusLine
+//   cc-picker install    部署核心脚本到 ~/.claude、写 shell 的 ccp/ccm 函数、配 statusLine、
+//                        装文件管理器右键菜单（--no-menu 跳过这一项）
+//   cc-picker update     install 的别名——npm 升级包之后用它把新版脚本刷进 ~/.claude
 //   cc-picker uninstall  清理脚本/缓存/shell 函数/statusLine（providers 含 token，保留）
 //   cc-picker status     查看安装状态
+//   cc-picker menu ...   文件管理器右键菜单的装/卸（Windows / macOS，见 core/cc-menu.js）
 //
 // 设计：运行时部署在 ~/.claude（稳定路径，nvm 切版本/卸包不影响）；
 // npm 全局 bin 的 ccp/ccm 与 profile 函数等价，二者都可用。
@@ -16,13 +19,19 @@ const path = require('path');
 const os = require('os');
 
 const PKG_ROOT = path.join(__dirname, '..');
+const PKG_VERSION = require('../package.json').version;
 const CORE_DIR = path.join(PKG_ROOT, 'core');
 const HOME = process.env.CC_HOME || os.homedir();   // CC_HOME 仅供测试/沙箱
 const CLAUDE_DIR = path.join(HOME, '.claude');
 const PROVIDERS_DIR = path.join(CLAUDE_DIR, 'providers');
 const SETTINGS_FILE = path.join(CLAUDE_DIR, 'settings.json');
 
-const CORE_FILES = ['ccp.js', 'ccm.js', 'ccm-page.html', 'cc-statusline.js', 'cc-usage.js', 'cc-lib.js'];
+const CORE_FILES = ['ccp.js', 'ccm.js', 'ccm-page.html', 'cc-statusline.js', 'cc-usage.js',
+                    'cc-lib.js', 'cc-menu.js'];
+
+// 右键菜单只有 Windows / macOS 有实现（Linux 各文件管理器机制不同）
+const MENU_PLATFORM = process.platform === 'win32' || process.platform === 'darwin';
+const menuModule = () => require(path.join(CORE_DIR, 'cc-menu.js'));
 
 const MARK_BEGIN = '# >>> cc 多供应商启动器 >>>';
 const MARK_END = '# <<< cc 多供应商启动器 <<<';
@@ -74,6 +83,7 @@ const TEMPLATES = {
 };
 
 const say = s => console.log(s);
+const L = (...lines) => lines.join('\n');
 const hdr = s => console.log('\x1b[36m' + s + '\x1b[0m');
 
 function stripBlock(text) {
@@ -96,8 +106,8 @@ function writeSettings(obj) {
 
 // ---------- install ----------
 
-function install() {
-  hdr('== Claude Code 多供应商启动器 安装 ==');
+function install(noMenu, isUpdate) {
+  hdr(`== Claude Code 多供应商启动器 ${isUpdate ? '更新' : '安装'} v${PKG_VERSION} ==`);
 
   try { fs.mkdirSync(PROVIDERS_DIR, { recursive: true }); } catch {}
 
@@ -105,7 +115,7 @@ function install() {
   for (const f of CORE_FILES) {
     fs.copyFileSync(path.join(CORE_DIR, f), path.join(CLAUDE_DIR, f));
   }
-  say('[1/4] ccp.js / ccm.js / cc-statusline.js / cc-usage.js 已写入 ~/.claude/');
+  say('[1/5] ccp.js / ccm.js / cc-statusline.js / cc-usage.js 已写入 ~/.claude/');
 
   // 2. providers 模板（已存在的不覆盖）
   for (const [name, body] of Object.entries(TEMPLATES)) {
@@ -113,7 +123,7 @@ function install() {
     if (fs.existsSync(p)) { say(`      providers/${name} 已存在，跳过`); }
     else { fs.writeFileSync(p, body); say(`      providers/${name} 模板已创建`); }
   }
-  say('[2/4] providers 目录就绪');
+  say('[2/5] providers 目录就绪');
 
   // 3. shell 的 ccp 命令（幂等：先移除旧标记块再追加）
   const installRc = rc => {
@@ -132,20 +142,20 @@ function install() {
     // 登录 shell 默认不读 .bashrc，这里手动加载
     const bp = path.join(HOME, '.bash_profile');
     if (!fs.existsSync(bp)) fs.writeFileSync(bp, '[ -f ~/.bashrc ] && . ~/.bashrc\n');
-    say('[3/4] bash ccp 命令已装入 ~/.bashrc');
+    say('[3/5] bash ccp 命令已装入 ~/.bashrc');
   }
   if (wantZsh) {
     installRc(path.join(HOME, '.zshrc'));
-    say('[3/4] zsh ccp 命令已装入 ~/.zshrc');
+    say('[3/5] zsh ccp 命令已装入 ~/.zshrc');
   }
   if (!wantBash && !wantZsh) {
-    say('[3/4] 未识别到 bash/zsh，跳过（请手动在 shell 配置里加 ccp/ccm 函数）');
+    say('[3/5] 未识别到 bash/zsh，跳过（请手动在 shell 配置里加 ccp/ccm 函数）');
   }
 
   // 4. settings.json 的 statusLine（已有则跳过，不动别家配置）
   let settings = readSettings();
   if (settings && settings.statusLine) {
-    say('[4/4] settings.json 已有 statusLine，跳过');
+    say('[4/5] settings.json 已有 statusLine，跳过');
   } else {
     if (!settings) settings = {};
     settings.statusLine = {
@@ -154,15 +164,29 @@ function install() {
       command: 'node ' + (CLAUDE_DIR + '/cc-statusline.js').replace(/\\/g, '/'),
     };
     writeSettings(settings);
-    say('[4/4] settings.json 已加 statusLine');
+    say('[4/5] settings.json 已加 statusLine');
+  }
+
+  // 5. 文件管理器右键菜单（默认装——改注册表 / 写 ~/Library/Services，--no-menu 可跳过）
+  if (!MENU_PLATFORM) {
+    say('[5/5] 当前平台没有右键菜单实现，跳过');
+  } else if (noMenu) {
+    say('[5/5] --no-menu：跳过右键菜单（以后想要: cc-picker menu install）');
+  } else {
+    process.stdout.write('[5/5] ');   // 跟 cc-menu 自己那句成功提示拼成一行
+    try { menuModule().menuInstall(); }
+    catch (e) { say('右键菜单安装失败（不影响其他部分）: ' + e.message); }
   }
 
   say('');
   say('安装完成。后续步骤：');
   say('  1. 运行 ccm 打开供应商管理器（浏览器页面），新增/编辑配置（或从旧机器拷贝 providers/*.json）');
   say('  2. 新开终端即可用 ccp / ccp glm 等（npm 全局装的用户 ccp/ccm 命令直接可用）');
+  if (MENU_PLATFORM && !noMenu) {
+    say('  3. 右键任意文件夹 →「Claude Code（选模型）」也能启动；不想要的话 cc-picker menu uninstall');
+  }
   if (fs.existsSync(path.join(HOME, '.cc-switch'))) {
-    say('  3. 注意：检测到 cc-switch——它会整份重写 settings.json，请把 statusLine 段加进它的 "Claude 通用配置"，否则切换供应商后状态栏会消失');
+    say('  注意：检测到 cc-switch——它会整份重写 settings.json，请把 statusLine 段加进它的 "Claude 通用配置"，否则切换供应商后状态栏会消失');
   }
 }
 
@@ -178,13 +202,17 @@ function uninstall() {
       say(`已清理 ${rc}`);
     }
   }
-  // 2. 脚本与缓存（providers 保留：内含 token）
+  // 2. 右键菜单（没装也不报错）
+  if (MENU_PLATFORM) {
+    try { menuModule().menuUninstall(); } catch {}
+  }
+  // 3. 脚本与缓存（providers 保留：内含 token）
   for (const f of [...CORE_FILES, 'cc-usage-cache.json', 'cc-usage.last']) {
     const p = path.join(CLAUDE_DIR, f);
     try { fs.unlinkSync(p); } catch {}
   }
   say('已删除 ~/.claude/ 下的 cc 系列脚本与缓存');
-  // 3. settings.json 里删掉本项目写入的 statusLine（仅当它指向 cc-statusline）
+  // 4. settings.json 里删掉本项目写入的 statusLine（仅当它指向 cc-statusline）
   const settings = readSettings();
   if (settings && settings.statusLine
       && String(settings.statusLine.command || '').includes('cc-statusline')) {
@@ -195,12 +223,29 @@ function uninstall() {
   say('卸载完成（providers/*.json 保留，如需删除: rm -rf ~/.claude/providers）');
 }
 
+// ~/.claude 下的是安装时复制的副本——npm 升级包不会自动刷新它们，
+// 逐文件比内容就知道要不要重跑一次 install
+function staleFiles() {
+  return CORE_FILES.filter(f => {
+    try {
+      return fs.readFileSync(path.join(CORE_DIR, f), 'utf8')
+        !== fs.readFileSync(path.join(CLAUDE_DIR, f), 'utf8');
+    } catch { return true; }
+  });
+}
+
 // ---------- status ----------
 
 function status() {
   hdr('== cc-picker 安装状态 ==');
   const missing = CORE_FILES.filter(f => !fs.existsSync(path.join(CLAUDE_DIR, f)));
   say(`核心脚本: ${missing.length ? '缺失 ' + missing.join(', ') : '齐全（~/.claude/）'}`);
+  const stale = staleFiles().filter(f => !missing.includes(f));
+  if (stale.length) {
+    say(`          ${stale.join(", ")} 与当前包 v${PKG_VERSION} 不一致——跑 cc-picker update 刷新`);
+  } else if (!missing.length) {
+    say(`          与当前包 v${PKG_VERSION} 一致`);
+  }
   const s = readSettings();
   const sl = s && s.statusLine && String(s.statusLine.command || '');
   say(`statusLine: ${sl ? sl : '未配置'}`);
@@ -213,19 +258,47 @@ function status() {
   let n = 0;
   try { n = fs.readdirSync(PROVIDERS_DIR).filter(f => f.endsWith('.json')).length; } catch {}
   say(`providers: ${n} 个配置（${PROVIDERS_DIR}）`);
+  if (MENU_PLATFORM) {
+    say('右键菜单:');
+    try { menuModule().menuStatus(); } catch (e) { say('  查询失败: ' + e.message); }
+  }
 }
 
 // ---------- 入口 ----------
 
+const USAGE = L(
+  '用法: cc-picker [install|update|uninstall|status] [--no-menu]   # 缺省 install',
+  '      update 是 install 的别名：npm 升级包后用它刷新 ~/.claude 里的脚本',
+  '      --no-menu 只在 install 时有意义：跳过文件管理器右键菜单',
+  '      cc-picker menu [install|uninstall|status]  # 文件管理器右键菜单（Windows / macOS）');
+
 const cmd = process.argv[2] || 'install';
+const noMenu = process.argv.includes('--no-menu');
 switch (cmd) {
-  case 'install': install(); break;
+  case 'install': install(noMenu); break;
+  case 'update': install(noMenu, true); break;
   case 'uninstall': uninstall(); break;
   case 'status': status(); break;
+  case 'menu': {
+    if (!MENU_PLATFORM) {
+      say('右键菜单只支持 Windows 与 macOS——Linux 各文件管理器机制不同，直接用 ccp 即可');
+      process.exit(1);
+    }
+    const m = menuModule();
+    const sub = process.argv[3] || 'install';
+    if (sub === 'install') m.menuInstall();
+    else if (sub === 'uninstall') m.menuUninstall();
+    else if (sub === 'status') m.menuStatus();
+    else {
+      say(`未知子命令: ${sub}\n用法: cc-picker menu [install|uninstall|status]`);
+      process.exit(1);
+    }
+    break;
+  }
   case 'help': case '--help': case '-h':
-    say('用法: cc-picker [install|uninstall|status]   # 缺省 install');
+    say(USAGE);
     break;
   default:
-    say(`未知命令: ${cmd}\n用法: cc-picker [install|uninstall|status]`);
+    say(`未知命令: ${cmd}\n` + USAGE);
     process.exit(1);
 }

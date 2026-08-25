@@ -14,18 +14,24 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
     fi
 done
 
-# 2. 脚本与缓存（providers 保留）
+# 2. 右键菜单（macOS 的 Finder 快速操作；没装也不报错）
+if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOME/.claude/cc-menu.js" ]; then
+    node "$HOME/.claude/cc-menu.js" uninstall || true
+fi
+
+# 3. 脚本与缓存（providers 保留）
 rm -f "$HOME/.claude/ccp.js" \
       "$HOME/.claude/ccm.js" \
       "$HOME/.claude/ccm-page.html" \
       "$HOME/.claude/cc-statusline.js" \
       "$HOME/.claude/cc-usage.js" \
       "$HOME/.claude/cc-lib.js" \
+      "$HOME/.claude/cc-menu.js" \
       "$HOME/.claude/cc-usage-cache.json" \
       "$HOME/.claude/cc-usage.last"
 echo '已删除 ~/.claude/ 下的 cc 系列脚本与缓存'
 
-# 3. settings.json 里删掉本项目写入的 statusLine（仅当它指向 cc-statusline.js）
+# 4. settings.json 里删掉本项目写入的 statusLine（仅当它指向 cc-statusline.js）
 node -e '
 const fs = require("fs");
 const p = process.env.HOME + "/.claude/settings.json";
