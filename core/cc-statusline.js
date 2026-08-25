@@ -82,10 +82,15 @@ function main(data) {
   let usageSeg = '';
   if (data.rate_limits) {
     const rl = data.rate_limits;
-    // resets_at：重置时间（ISO 字符串），存在时附倒计时
+    // resets_at：Claude Code 传的是 Unix 秒（数字），另兼容毫秒数字与 ISO 字符串
+    const resetMs = v => {
+      if (v == null || v === '') return 0;
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) return n > 1e12 ? n : n * 1000;
+      return Date.parse(String(v)) || 0;
+    };
     const resetCd = r => {
-      if (!r || !r.resets_at) return '';
-      const t = Date.parse(r.resets_at);
+      const t = r ? resetMs(r.resets_at) : 0;
       if (!t) return '';
       const cd = countdown(t - nowMs);
       return cd ? ' ' + cd : '';
