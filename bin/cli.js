@@ -246,8 +246,9 @@ function update() {
     return;
   }
   say(`当前 v${PKG_VERSION}，正在拉取最新版…`);
-  const r = spawnSync('npm', ['install', '-g', 'cc-picker@latest'],
-    { stdio: 'inherit', shell: process.platform === 'win32' });
+  // 整条命令给字符串而不是 args 数组：Windows 上 npm 是 .cmd，必须经 shell 才跑得起来，
+  // 而 shell:true 配 args 数组会触发 Node 的 DEP0190 弃用警告（命令这里是硬编码的）
+  const r = spawnSync('npm install -g cc-picker@latest', { stdio: 'inherit', shell: true });
   if (r.status !== 0) {
     say('npm 安装没成功——手动跑一次: npm install -g cc-picker@latest');
     process.exitCode = 1;
