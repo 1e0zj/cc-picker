@@ -6,7 +6,7 @@
 //   cc-picker            安装（= install；npx 一次装的默认动作）
 //   cc-picker install    部署核心脚本到 ~/.claude、写 shell 的 ccp/ccm 函数、配 statusLine、
 //                        装文件管理器右键菜单（--no-menu 跳过这一项）
-//   cc-picker update     install 的别名——npm 升级包之后用它把新版脚本刷进 ~/.claude
+//   cc-picker update     拉最新 npm 包并刷新 ~/.claude 下的脚本（一步更新）
 //   cc-picker uninstall  清理脚本/缓存/shell 函数/statusLine（providers 含 token，保留）
 //   cc-picker status     查看安装状态
 //   cc-picker menu ...   文件管理器右键菜单的装/卸（Windows / macOS，见 core/cc-menu.js）
@@ -17,6 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { spawnSync } = require('child_process');
 
 const PKG_ROOT = path.join(__dirname, '..');
 const PKG_VERSION = require('../package.json').version;
@@ -234,6 +235,36 @@ function staleFiles() {
   });
 }
 
+// ---------- update ----------
+
+// npm 换包只换 node_modules 里的源文件，~/.claude 下的副本得另刷一遍。
+// 新包的 postinstall 通常已经代劳，这里再核一次，兜住它没跑起来的情况。
+function update() {
+  hdr('== cc-picker 更新 ==');
+  if (!/node_modules/.test(PKG_ROOT)) {
+    say('当前跑的不是 npm 装的包（看着像克隆的仓库）——更新请用: git pull && bash install.sh');
+    return;
+  }
+  say(`当前 v${PKG_VERSION}，正在拉取最新版…`);
+  const r = spawnSync('npm', ['install', '-g', 'cc-picker@latest'],
+    { stdio: 'inherit', shell: process.platform === 'win32' });
+  if (r.status !== 0) {
+    say('npm 安装没成功——手动跑一次: npm install -g cc-picker@latest');
+    process.exitCode = 1;
+    return;
+  }
+  // 包已被换成新版，重新读一遍版本号（PKG_VERSION 是进程启动时的旧值）
+  let now = PKG_VERSION;
+  try { now = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version; } catch {}
+  const stale = staleFiles();
+  for (const f of stale) {
+    try { fs.copyFileSync(path.join(CORE_DIR, f), path.join(CLAUDE_DIR, f)); } catch {}
+  }
+  say(stale.length ? `~/.claude 下 ${stale.length} 个脚本已刷新` : '~/.claude 下的脚本已是最新');
+  say(`现在是 v${now}`);
+  say('（statusLine、shell 函数、右键菜单指向的路径没变，不需要重装）');
+}
+
 // ---------- status ----------
 
 function status() {
@@ -268,15 +299,19 @@ function status() {
 
 const USAGE = L(
   '用法: cc-picker [install|update|uninstall|status] [--no-menu]   # 缺省 install',
-  '      update 是 install 的别名：npm 升级包后用它刷新 ~/.claude 里的脚本',
+  '      update 拉最新 npm 包并刷新 ~/.claude 下的脚本',
   '      --no-menu 只在 install 时有意义：跳过文件管理器右键菜单',
   '      cc-picker menu [install|uninstall|status]  # 文件管理器右键菜单（Windows / macOS）');
+
+// 供 postinstall.js 复用；下面的入口只在直接执行时跑
+module.exports = { CORE_FILES };
+if (require.main !== module) return;
 
 const cmd = process.argv[2] || 'install';
 const noMenu = process.argv.includes('--no-menu');
 switch (cmd) {
   case 'install': install(noMenu); break;
-  case 'update': install(noMenu, true); break;
+  case 'update': update(); break;
   case 'uninstall': uninstall(); break;
   case 'status': status(); break;
   case 'menu': {

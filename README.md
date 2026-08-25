@@ -64,16 +64,15 @@ ccp glm       # 直达某个配置
 
 ## 更新
 
-npm 包和 `~/.claude` 下的运行时是两份东西——升级包只换掉 `node_modules` 里的源文件，用户实际跑的 `~/.claude/ccp.js` 还是旧的。所以要两步：
-
 ```bash
-npm install -g cc-picker@latest
-cc-picker update      # install 的别名，幂等：把新版脚本刷进 ~/.claude
+cc-picker update
 ```
 
-`cc-picker status` 会逐个比对 `~/.claude` 里的脚本和当前包，不一致会直接告诉你。更新不会动 `providers/*.json`，settings.json 里已有的 `statusLine` 也照旧跳过。
+它会去拉最新的 npm 包，再把新版脚本刷进 `~/.claude`。等价的写法是直接 `npm install -g cc-picker@latest`——包的 postinstall 会做同样的刷新。
 
-克隆仓库装的重跑 `bash install.sh` 即可（同样幂等）。
+之所以需要这一步刷新：`~/.claude` 下跑的是安装时复制的副本（statusLine、shell 函数、右键菜单都写死指向那个稳定路径，换 node 版本或卸掉 npm 包都不受影响），而 npm 换包只换 `node_modules` 里的源文件。刷新只动脚本本身，`providers/*.json`、settings.json、右键菜单注册项都不碰。
+
+`cc-picker status` 会逐个比对 `~/.claude` 里的脚本和当前包，不一致会直接点名。克隆仓库装的走 `git pull && bash install.sh`。
 
 ## 工作原理
 

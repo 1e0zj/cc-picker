@@ -24,7 +24,8 @@
     "deepseek"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "postinstall": "node bin/postinstall.js"
   },
   "bin": {
     "cc-picker": "bin/cli.js",
