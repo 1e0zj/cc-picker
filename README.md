@@ -39,9 +39,9 @@ cc-picker 的做法很简洁：用 claude 启动参数 [`--settings`](#工作原
 |---|:---:|---|
 | `ccp` 命令 | 全平台 | 终端内菜单选供应商启动；熟练后 `ccp glm`、`ccp deepseek-work` 直达 |
 | 资源管理器右键 | Windows | 任意目录右键 →「Claude Code（选模型）」→ 弹窗选择 → 新终端窗口在该目录启动 |
-| `ccm` 管理器 | 全平台 | GUI 增删改供应商配置（cc-switch 式 JSON 直编）；GLM / DeepSeek / 官方一键预设；连通测试（发最小请求回报 HTTP 状态）；「默认」一键切换裸 `claude` 的供应商、「通用配置」直编全局 settings.json——可替代 cc-switch。Windows 为 WinForms 窗口，macOS/Linux 为浏览器页面（本地服务，仅监听 127.0.0.1） |
+| `ccm` 管理器 | 全平台 | GUI 增删改供应商配置（cc-switch 式 JSON 直编）；卡片直接显示 Claude 官方/GLM 的 5 小时与 7 天限额、DeepSeek CNY 余额，支持 5 分钟缓存和单卡刷新；GLM / DeepSeek / 官方一键预设；连通测试；「默认」一键切换裸 `claude` 的供应商、「通用配置」直编全局 settings.json——可替代 cc-switch。Windows 为 WinForms 窗口，macOS/Linux 为浏览器页面（本地服务，仅监听 127.0.0.1） |
 | 状态栏 | 全平台 | 常驻显示 `[账号] 模型 · 目录 · 上下文% · 5h% · 周%`，用 token 反查配置文件识别账号——连裸 `claude` 都能识别当前用的哪个号 |
-| 限额显示 | 全平台 | 官方订阅读 Claude Code 自带的 rate_limits（免费实时）；GLM（5h/周）与 DeepSeek（余额）由后台查询缓存（`cc-usage`），状态栏只读缓存、过期才异步刷新，不阻塞 |
+| 限额显示 | 全平台 | 状态栏里的官方订阅读 Claude Code 自带的 rate_limits；CCM 的官方订阅复用本机 Claude Code OAuth 登录查询。GLM（5h/周）与 DeepSeek（余额）由后台查询并缓存（`cc-usage`），查询失败会保留最后一次成功结果 |
 | tab 颜色 | Windows | 按厂商归组着色，与状态栏同色：GLM 系青 / DeepSeek 系蓝 / 官方绿 / 其他黄；标题启动后由 Claude Code 接管（会话/任务状态，可用 `/rename` 命名） |
 
 Windows 支持 Git Bash 和 PowerShell 7 的 `ccp` / `ccm` 命令；macOS / Linux 装入 bash / zsh。
@@ -130,7 +130,7 @@ bash uninstall.sh   # 清理脚本、缓存、shell 函数与 statusLine；provi
 
 - **状态栏消失了？** 装了 cc-switch 的话见上节——把 `statusLine` 段加进它的通用配置。
 - **状态栏的账号名怎么来的？** 启动时用进程环境里的 `ANTHROPIC_AUTH_TOKEN` 逐一比对 `providers/*.json`，匹配即显示文件名；匹配不到则按 `ANTHROPIC_BASE_URL` 的主机名显示，两者皆空显示 `official`。
-- **状态栏的限额（5h/周）哪来的？** 官方订阅：Claude Code 传给状态栏的 JSON 自带 `rate_limits`（5 小时 + 7 天窗口），直接显示。GLM：`cc-usage.ps1` 调智谱限额接口把结果缓存到 `~/.claude/cc-usage-cache.json`，状态栏读缓存显示，超过 10 分钟触发后台异步刷新（2 分钟防抖）——状态栏本身从不发网络请求，不会拖慢刷新。DeepSeek 显示账户余额（¥）。智谱接口另返回的 TIME_LIMIT 是附加产品（搜索/网页阅读等）的月度量，与模型调用限额无关，不显示；各账号有几档显示几档。
+- **限额（5h/7天）哪来的？** 状态栏中的官方订阅数据由 Claude Code 通过 `rate_limits` 直接提供；CCM 页面则读取本机 `~/.claude/.credentials.json`（macOS 兼容 Claude Code Keychain）里的 OAuth 登录，向 Anthropic 用量端点查询。GLM 调智谱限额接口，DeepSeek 调余额接口，统一缓存到 `~/.claude/cc-usage-cache.json`；CCM 每 5 分钟或点击卡片刷新，状态栏超过 10 分钟才异步刷新。Token 只发给各自官方接口。智谱返回的 TIME_LIMIT 是搜索/网页阅读等附加产品月度量，不显示。
 - **在盘符根目录右键报“目录不存在”？** 旧版本问题（`"C:\"` 的 `\"` 被解析成转义引号），已修复。
 
 ## 开发与发布

@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const lib = require('./cc-lib');
+const usageLib = require('./cc-usage');
 
 const args = process.argv.slice(2);
 if (args.includes('--list')) {
@@ -152,6 +153,15 @@ function setDefault(name) {
 // ---------- HTTP ----------
 
 const PAGE = path.join(__dirname, 'ccm-page.html');
+const usageRefreshes = new Map();
+
+// 同一张卡片的并发刷新合并成一个请求，避免连点刷新重复打厂商接口。
+function refreshProviderUsage(name) {
+  if (usageRefreshes.has(name)) return usageRefreshes.get(name);
+  const task = usageLib.refreshUsage([name]).finally(() => usageRefreshes.delete(name));
+  usageRefreshes.set(name, task);
+  return task;
+}
 
 function sendJson(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -186,17 +196,36 @@ async function handler(req, res) {
     if (req.method === 'GET' && url.pathname === '/api/providers') {
       const base = lib.getProviders();
       const defName = currentDefault(base);
+      const usageCache = usageLib.readCache();
       const providers = base.map(p => ({
         name: p.name, url: p.url, model: p.model, masked: p.masked, env: p.env,
         raw: lib.readProviderJson(p.path),
         isDefault: p.name === defName,
+        usageKind: usageLib.usageKind(p),
+        usage: usageCache[p.name] || null,
       }));
       return sendJson(res, 200, { providers, dir: lib.PROVIDERS_DIR, defaultName: defName });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/save') {
-      const r = saveRaw(await readBody(req));
+      const body = await readBody(req);
+      const r = saveRaw(body);
+      if (!r.error) {
+        if (body.oldName) usageLib.clearUsage(String(body.oldName));
+        usageLib.clearUsage(String(body.name));
+      }
       return sendJson(res, r.error ? 400 : 200, r);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/usage') {
+      const { name } = await readBody(req);
+      const sel = lib.getProviders().find(p => p.name === name);
+      if (!sel) return sendJson(res, 404, { error: 'no such provider' });
+      if (!usageLib.usageKind(sel)) {
+        return sendJson(res, 400, { error: '该供应商暂不支持自动查询限额' });
+      }
+      const cache = await refreshProviderUsage(sel.name);
+      return sendJson(res, 200, { usage: cache[sel.name] || null });
     }
 
     // 通用配置：查看/编辑全局 settings.json
@@ -227,6 +256,7 @@ async function handler(req, res) {
       const { name } = await readBody(req);
       if (!name) return sendJson(res, 400, { error: 'missing name' });
       try { fs.unlinkSync(lib.providerPath(String(name))); } catch {}
+      usageLib.clearUsage(String(name));
       return sendJson(res, 200, { ok: true });
     }
 

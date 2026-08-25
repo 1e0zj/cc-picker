@@ -47,6 +47,7 @@ jobs:
       - name: 沙箱验证
         run: |
           set -e
+          npm test
           for f in bin/cli.js core/ccp.js core/ccm.js core/cc-statusline.js core/cc-usage.js core/cc-lib.js; do
             node --check "$f"
           done

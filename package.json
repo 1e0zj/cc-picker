@@ -23,6 +23,9 @@
     "glm",
     "deepseek"
   ],
+  "scripts": {
+    "test": "node --test"
+  },
   "bin": {
     "cc-picker": "bin/cli.js",
     "ccp": "core/ccp.js",

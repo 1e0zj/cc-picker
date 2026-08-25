@@ -44,6 +44,8 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $providersDir = Join-Path $env:USERPROFILE '.claude\providers'
+$usageCacheFile = Join-Path $env:USERPROFILE '.claude\cc-usage-cache.json'
+$usageScript = Join-Path $env:USERPROFILE '.claude\cc-usage.ps1'
 New-Item -ItemType Directory -Force -Path $providersDir | Out-Null
 
 # ---------- 数据层 ----------
@@ -100,6 +102,52 @@ function Test-Provider($p) {
         }
         return "不可达：$($_.Exception.Message)"
     }
+}
+
+function Test-UsageSupported($p) {
+    if ($p.Url -match 'bigmodel\.cn|api\.z\.ai|api\.deepseek\.com') { return $true }
+    return [string]::IsNullOrWhiteSpace($p.Url) -and [string]::IsNullOrWhiteSpace($p.Token)
+}
+
+function Get-UsageEntry([string]$Name) {
+    if (-not (Test-Path -LiteralPath $usageCacheFile)) { return $null }
+    try { return (Get-Content -LiteralPath $usageCacheFile -Raw | ConvertFrom-Json).($Name) } catch { return $null }
+}
+
+function Format-UsageAge($FetchedAt) {
+    if (-not $FetchedAt) { return '未查询' }
+    try { $span = (Get-Date) - [datetime]$FetchedAt } catch { return '未查询' }
+    if ($span.TotalMinutes -lt 1) { return '刚刚' }
+    if ($span.TotalHours -lt 1) { return "$([int][Math]::Floor($span.TotalMinutes)) 分钟前" }
+    if ($span.TotalDays -lt 1) { return "$([int][Math]::Floor($span.TotalHours)) 小时前" }
+    return "$([int][Math]::Floor($span.TotalDays)) 天前"
+}
+
+function Format-UsageCountdown([double]$ResetMs) {
+    $remain = $ResetMs - [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    if ($remain -le 60000) { return '' }
+    $mins = [int][Math]::Floor($remain / 60000)
+    $h = [int][Math]::Floor($mins / 60)
+    if ($h -ge 48) { return "$([int][Math]::Floor($h / 24))d$($h % 24)h" }
+    if ($h -gt 0) { return "${h}h$($mins % 60)m" }
+    return "${mins}m"
+}
+
+function Get-UsageDisplay($p) {
+    $u = Get-UsageEntry $p.Name
+    if (-not $u) { return @{ Age = '未查询'; Text = '点击 ↻ 查询'; Color = $theme.sub } }
+    if ($u.error) { return @{ Age = (Format-UsageAge $u.fetchedAt); Text = "查询失败：$($u.error)"; Color = $theme.red } }
+    $parts = @(); $worst = 0
+    foreach ($t in @($u.tiers)) {
+        $pct = [int]$t.pct
+        if ($pct -gt $worst) { $worst = $pct }
+        $label = if ($t.kind -eq 'h5') { '5小时' } elseif ($t.kind -eq 'week') { '7天' } else { [string]$t.kind }
+        $cd = if ($t.resetMs) { Format-UsageCountdown ([double]$t.resetMs) } else { '' }
+        $parts += "$label`: $pct%" + $(if ($cd) { " ◷$cd" } else { '' })
+    }
+    if ($null -ne $u.balance -and [string]$u.balance -ne '') { $parts += "余额：$($u.balance) CNY" }
+    $color = if ($worst -ge 90) { $theme.red } elseif ($worst -ge 70) { $theme.orange } else { $theme.green }
+    return @{ Age = (Format-UsageAge $u.fetchedAt); Text = $(if ($parts) { $parts -join '  ' } else { '暂无额度数据' }); Color = $color }
 }
 
 # ---------- -List 模式（无 GUI）----------
@@ -440,8 +488,8 @@ function Show-EditDialog($existing) {
 
 function New-ProviderCard($p) {
     $card = New-Object System.Windows.Forms.Panel
-    $card.Width = Px 640   # 基准宽度：右缘锚定的按钮/徽标按它定位，入列后再拉伸到列表宽
-    $card.Height = Px 88
+    $card.Width = Px 840   # 基准宽度：右缘锚定的按钮/徽标按它定位，入列后再拉伸到列表宽
+    $card.Height = Px 96
     $card.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, (Px 16))
     $card.Cursor = 'Hand'
     $card.BackColor = Get-Clr $theme.bg
@@ -523,15 +571,41 @@ function New-ProviderCard($p) {
     $lblTok.Add_Click($editClick)
     [void]$card.Controls.Add($lblTok)
 
+    if (Test-UsageSupported $p) {
+        $ud = Get-UsageDisplay $p
+        $lblUsageAge = New-Object System.Windows.Forms.Label
+        $lblUsageAge.Text = '◷ ' + $ud.Age
+        $lblUsageAge.Font = $uiFontSub
+        $lblUsageAge.ForeColor = Get-Clr $theme.sub
+        $lblUsageAge.BackColor = 'Transparent'
+        $lblUsageAge.TextAlign = 'MiddleRight'
+        $lblUsageAge.SetBounds((Px 555), (Px 9), (Px 245), (Px 22))
+        $lblUsageAge.Anchor = 'Top,Right'
+        $lblUsage = New-Object System.Windows.Forms.Label
+        $lblUsage.Text = $ud.Text
+        $lblUsage.Font = $uiFontSub
+        $lblUsage.ForeColor = Get-Clr $ud.Color
+        $lblUsage.BackColor = 'Transparent'
+        $lblUsage.TextAlign = 'MiddleRight'
+        $lblUsage.AutoEllipsis = $true
+        $lblUsage.SetBounds((Px 500), (Px 31), (Px 300), (Px 22))
+        $lblUsage.Anchor = 'Top,Right'
+        $btnUsage = New-FlatButton '↻' 28 28
+        $btnUsage.Location = New-Object System.Drawing.Point((Px 802), (Px 7))
+        $btnUsage.Anchor = 'Top,Right'
+        $btnUsage.Add_Click({ Invoke-RefreshUsage $p.Name }.GetNewClosure())
+        $card.Controls.AddRange(@($lblUsageAge, $lblUsage, $btnUsage))
+    }
+
     # 右下操作
     $btnEdit = New-FlatButton '编辑' 56 28
-    $btnEdit.Location = New-Object System.Drawing.Point((Px 450), (Px 48))
+    $btnEdit.Location = New-Object System.Drawing.Point((Px 650), (Px 58))
     $btnEdit.Anchor = 'Right,Bottom'
     $btnTest = New-FlatButton '测试' 56 28
-    $btnTest.Location = New-Object System.Drawing.Point((Px 510), (Px 48))
+    $btnTest.Location = New-Object System.Drawing.Point((Px 710), (Px 58))
     $btnTest.Anchor = 'Right,Bottom'
     $btnDel = New-FlatButton '删除' 56 28 'danger'
-    $btnDel.Location = New-Object System.Drawing.Point((Px 570), (Px 48))
+    $btnDel.Location = New-Object System.Drawing.Point((Px 770), (Px 58))
     $btnDel.Anchor = 'Right,Bottom'
     $card.Controls.AddRange(@($btnEdit, $btnTest, $btnDel))
     $btnEdit.Add_Click($editClick)
@@ -575,11 +649,47 @@ function Invoke-TestProvider([string]$Name) {
     elseif ($msg -match 'HTTP') { $statusLabel.ForeColor = Get-Clr $theme.green }
 }
 
+function Invoke-RefreshUsage([string]$Name, [switch]$Silent) {
+    if (-not (Test-Path -LiteralPath $usageScript)) { return }
+    $key = if ($Name) { $Name } else { '__all__' }
+    if ($script:usageProcesses[$key] -and -not $script:usageProcesses[$key].HasExited) { return }
+    if (-not $Silent) {
+        $statusLabel.Text = "正在刷新 $Name 的限额…"
+        $statusLabel.ForeColor = Get-Clr $theme.sub
+    }
+    $exe = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
+    if (-not $exe) { $exe = (Get-Command powershell).Source }
+    $args = @('-NoProfile', '-File', $usageScript)
+    if ($Name) { $args += $Name }
+    $proc = Start-Process -FilePath $exe -ArgumentList $args -WindowStyle Hidden -PassThru
+    $script:usageProcesses[$key] = $proc
+    $timer = New-Object System.Windows.Forms.Timer
+    $timer.Interval = 300
+    $timer.Add_Tick({
+        if ($proc.HasExited) {
+            $timer.Stop(); $timer.Dispose(); $script:usageProcesses.Remove($key)
+            Refresh-List
+            if (-not $Silent) {
+                $u = Get-UsageEntry $Name
+                if ($u.error -or $u.lastError) {
+                    $errText = if ($u.error) { $u.error } else { $u.lastError }
+                    $statusLabel.Text = "$Name`: $errText"
+                    $statusLabel.ForeColor = Get-Clr $theme.red
+                } else {
+                    $statusLabel.Text = "$Name 限额已刷新"
+                    $statusLabel.ForeColor = Get-Clr $theme.green
+                }
+            }
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
 $form = New-Object System.Windows.Forms.Form
 $form.Text          = 'Claude Code 供应商管理'
 $form.StartPosition = 'CenterScreen'
-$form.ClientSize    = New-Object System.Drawing.Size((Px 740), (Px 540))
-$form.MinimumSize   = New-Object System.Drawing.Size((Px 580), (Px 420))
+$form.ClientSize    = New-Object System.Drawing.Size((Px 940), (Px 560))
+$form.MinimumSize   = New-Object System.Drawing.Size((Px 760), (Px 440))
 $form.TopMost       = $true
 # AutoScaleMode 必须显式 None：顶级 Form 默认按字体自动缩放，显示时会把窗口压回 96dpi 基准
 $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
@@ -594,6 +704,7 @@ $flow.WrapContents = $false
 $flow.AutoScroll = $true
 $flow.BackColor = Get-Clr $theme.bg
 $flow.Padding = New-Object System.Windows.Forms.Padding((Px 18), (Px 8), (Px 18), (Px 8))
+$script:usageProcesses = @{}
 
 # 顶栏：标题 + 副标题 + 右侧按钮
 $top = New-Object System.Windows.Forms.Panel
@@ -677,7 +788,17 @@ function Refresh-List {
 
 $btnAdd.Add_Click({ Invoke-AddProvider })
 $btnFolder.Add_Click({ Start-Process explorer.exe "/select,`"$providersDir`"" })
-$form.Add_Shown({ Enable-DarkTitleBar $form })
+$form.Add_Shown({
+    Enable-DarkTitleBar $form
+    $needsUsage = $false
+    foreach ($p in (Get-Providers)) {
+        if (-not (Test-UsageSupported $p)) { continue }
+        $u = Get-UsageEntry $p.Name
+        if (-not $u) { $needsUsage = $true; break }
+        try { if (((Get-Date) - [datetime]$u.fetchedAt).TotalMinutes -gt 5) { $needsUsage = $true; break } } catch { $needsUsage = $true; break }
+    }
+    if ($needsUsage) { Invoke-RefreshUsage $null -Silent }
+})
 $form.Add_Resize({ foreach ($c in $flow.Controls) { if ($c -is [System.Windows.Forms.Panel]) { $c.Width = [Math]::Max((Px 320), $flow.ClientSize.Width - (Px 36)) } } })
 
 Refresh-List
@@ -829,7 +950,8 @@ cc-usage.ps1 — 供应商限额/余额查询（结果写缓存，供状态栏�
                                     data.limits[] 里 type=TOKENS_LIMIT 的条目：unit=3 → 5小时窗口，unit=6 → 周窗口
                                     （percentage = 已用百分比，nextResetTime = 毫秒时间戳）
   DeepSeek                          GET https://api.deepseek.com/user/balance（账户余额，CNY）
-  官方/其他                         不查询
+  Claude 官方订阅                  GET https://api.anthropic.com/api/oauth/usage（复用本机 Claude Code 登录）
+  其他                              不查询
 
 用法: pwsh -NoProfile -File cc-usage.ps1 [provider 名 ...]    # 缺省刷新全部
 缓存: ~/.claude/cc-usage-cache.json   （格式 { <名>: { fetchedAt, tiers:[{kind,pct,resetMs}] | balance | error } }）
@@ -873,6 +995,31 @@ function Get-GlmUsage([string]$ApiHost, [string]$Token) {
     }
 }
 
+function Get-ClaudeUsage {
+    $credFile = Join-Path $env:USERPROFILE '.claude\.credentials.json'
+    try { $oauth = (Get-Content -LiteralPath $credFile -Raw | ConvertFrom-Json).claudeAiOauth } catch { $oauth = $null }
+    $token = [string]$oauth.accessToken
+    if (-not $token) { return [pscustomobject]@{ fetchedAt = $now; error = '未找到 Claude Code 登录凭据' } }
+    try {
+        $resp = Invoke-RestMethod -Uri 'https://api.anthropic.com/api/oauth/usage' -Headers @{
+            Authorization = 'Bearer ' + $token
+            'anthropic-beta' = 'oauth-2025-04-20'
+        } -TimeoutSec 15
+        $tiers = @()
+        foreach ($pair in @(@('five_hour', 'h5'), @('seven_day', 'week'))) {
+            $item = $resp.($pair[0])
+            if (-not $item -or $null -eq $item.utilization) { continue }
+            $resetMs = 0
+            try { if ($item.resets_at) { $resetMs = [DateTimeOffset]::Parse([string]$item.resets_at).ToUnixTimeMilliseconds() } } catch {}
+            $tiers += [pscustomobject]@{ kind = $pair[1]; pct = [int][double]$item.utilization; resetMs = $resetMs }
+        }
+        if (-not $tiers) { return [pscustomobject]@{ fetchedAt = $now; error = '当前账号没有可显示的订阅额度' } }
+        return [pscustomobject]@{ fetchedAt = $now; tiers = $tiers }
+    } catch {
+        return [pscustomobject]@{ fetchedAt = $now; error = [string]$_.Exception.Message }
+    }
+}
+
 # 读旧缓存（保留本次未刷新的条目）
 $cacheMap = @{}
 if (Test-Path -LiteralPath $cacheFile) {
@@ -888,10 +1035,13 @@ foreach ($f in @(Get-ChildItem -LiteralPath $providersDir -Filter '*.json' | Whe
     try { $envObj = (Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json).env } catch { continue }
     $token = [string]$envObj.ANTHROPIC_AUTH_TOKEN
     $url   = [string]$envObj.ANTHROPIC_BASE_URL
-    if (-not $token -or $token -match '在这里填入') { continue }   # 未填 token 的模板
+    $isOfficial = [string]::IsNullOrWhiteSpace($url) -and [string]::IsNullOrWhiteSpace($token)
+    if (-not $isOfficial -and (-not $token -or $token -match '在这里填入')) { continue }   # 未填 token 的模板
 
     $entry = $null
-    if ($url -match 'bigmodel\.cn') {
+    if ($isOfficial) {
+        $entry = Get-ClaudeUsage
+    } elseif ($url -match 'bigmodel\.cn') {
         $entry = Get-GlmUsage 'https://open.bigmodel.cn' $token
     } elseif ($url -match 'api\.z\.ai') {
         $entry = Get-GlmUsage 'https://api.z.ai' $token
@@ -904,7 +1054,16 @@ foreach ($f in @(Get-ChildItem -LiteralPath $providersDir -Filter '*.json' | Whe
             $entry = [pscustomobject]@{ fetchedAt = $now; error = [string]$_.Exception.Message }
         }
     }
-    if ($entry) { $cacheMap[$name] = $entry }
+    if ($entry) {
+        $oldEntry = $cacheMap[$name]
+        if ($entry.error -and $oldEntry -and -not $oldEntry.error -and ($oldEntry.tiers -or $null -ne $oldEntry.balance)) {
+            $oldEntry | Add-Member -NotePropertyName lastError -NotePropertyValue $entry.error -Force
+            $oldEntry | Add-Member -NotePropertyName failedAt -NotePropertyValue $entry.fetchedAt -Force
+            $cacheMap[$name] = $oldEntry
+        } else {
+            $cacheMap[$name] = $entry
+        }
+    }
 }
 
 $out = [ordered]@{}

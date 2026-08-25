@@ -67,7 +67,7 @@
     border-radius: 10px; color: #fff; font-size: 19px; font-weight: 600;
     display: flex; align-items: center; justify-content: center;
   }
-  .info { min-width: 0; }
+  .info { flex: 1; min-width: 0; }
   .name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
   .chip-default {
     display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
@@ -78,9 +78,38 @@
     font-size: 12.5px; color: var(--sub);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 480px;
   }
-  .acts { margin-left: auto; display: flex; gap: 6px; }
+  /* cc-switch 式限额区：刷新时间在上，用量/余额在下 */
+  .usage {
+    flex: none; width: 250px; margin-left: 18px; text-align: right;
+    color: var(--sub); font-size: 12.5px; line-height: 1.8;
+  }
+  .usage-head { display: flex; align-items: center; justify-content: flex-end; min-height: 24px; }
+  .usage-age::before { content: '◷'; margin-right: 5px; }
+  .usage-refresh {
+    width: 20px; height: 20px; margin-left: 4px; padding: 0; border-radius: 50%;
+    background: transparent; color: var(--sub); font-size: 15px; line-height: 20px;
+  }
+  .usage-refresh:hover { background: var(--chipBg); color: var(--text); }
+  .usage-refresh.loading { animation: spin .8s linear infinite; pointer-events: none; }
+  .usage-body { min-height: 23px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .usage-item + .usage-item { margin-left: 10px; }
+  .usage-pct, .usage-balance { font-weight: 600; }
+  .usage-pct.good, .usage-balance { color: var(--green); }
+  .usage-pct.warn { color: var(--orange); }
+  .usage-pct.bad, .usage-error { color: var(--red); }
+  .usage-reset { margin-left: 4px; color: var(--sub); }
+  .usage-reset::before { content: '◷'; margin-right: 2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .acts { margin-left: 18px; display: flex; gap: 6px; }
   .acts button { width: 56px; height: 28px; padding: 0; font-size: 12.5px; }
   .empty { color: var(--sub); font-size: 12.5px; padding: 26px 4px; }
+
+  @media (max-width: 980px) {
+    .card { flex-wrap: wrap; }
+    .usage { order: 3; width: calc(100% - 60px); margin: 10px 0 0 60px; text-align: left; }
+    .usage-head { justify-content: flex-start; }
+  }
 
   /* 底部状态条 */
   footer {
@@ -175,6 +204,7 @@ const $ = id => document.getElementById(id);
 let providers = [];
 let editing = null;            // null = 新增；对象 = 编辑
 let dialogMode = 'provider';   // 'provider' | 'settings'（通用配置编辑）
+const USAGE_STALE_MS = 5 * 60 * 1000;
 
 // 厂商主色：与 wt tab / 状态栏配色一致（glm 系=青，deepseek 系=蓝，官方=绿，其余=黄）
 function brandColor(p) {
@@ -207,6 +237,76 @@ function setStatus(msg, cls) {
   el.className = 'status' + (cls ? ' ' + cls : '');
 }
 
+function countdown(ms) {
+  if (!(ms > 60000)) return '';
+  const mins = Math.floor(ms / 60000), h = Math.floor(mins / 60);
+  if (h >= 48) return `${Math.floor(h / 24)}d${h % 24}h`;
+  if (h > 0) return `${h}h${mins % 60}m`;
+  return `${mins}m`;
+}
+
+function usageAge(iso) {
+  const ms = Date.now() - (Date.parse(iso) || 0);
+  if (ms < 60 * 1000) return '刚刚';
+  if (ms < 60 * 60 * 1000) return Math.floor(ms / 60000) + ' 分钟前';
+  if (ms < 24 * 60 * 60 * 1000) return Math.floor(ms / 3600000) + ' 小时前';
+  return Math.floor(ms / 86400000) + ' 天前';
+}
+
+function usageMarkup(p, loading) {
+  const u = p.usage;
+  const age = u && u.fetchedAt ? usageAge(u.fetchedAt) : '未查询';
+  let body = '<span>点击刷新查询</span>';
+  if (loading && !u) body = '<span>查询中…</span>';
+  else if (u && u.error) {
+    body = `<span class="usage-error" title="${esc(u.error)}">查询失败：${esc(u.error)}</span>`;
+  } else if (u) {
+    const items = [];
+    for (const t of (u.tiers || [])) {
+      const pct = Math.max(0, Math.trunc(Number(t.pct) || 0));
+      const cls = pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : 'good';
+      const label = t.kind === 'h5' ? '5小时' : t.kind === 'week' ? '7天' : esc(t.kind);
+      const cd = t.resetMs ? countdown(Number(t.resetMs) - Date.now()) : '';
+      items.push(`<span class="usage-item">${label}: <span class="usage-pct ${cls}">${pct}%</span>` +
+        `${cd ? `<span class="usage-reset">${esc(cd)}</span>` : ''}</span>`);
+    }
+    if (u.balance !== undefined && u.balance !== '') {
+      items.push(`<span class="usage-item">余额： <span class="usage-balance">${esc(u.balance)}</span> CNY</span>`);
+    }
+    body = items.join('') || '<span>暂无额度数据</span>';
+  }
+  const refreshTitle = u && u.lastError ? `上次刷新失败：${u.lastError}` : '刷新限额';
+  return `<div class="usage-head"><span class="usage-age" title="${esc(refreshTitle)}">${esc(age)}</span>` +
+    `<button class="usage-refresh${loading ? ' loading' : ''}" data-act="usage" ` +
+    `title="${esc(refreshTitle)}" aria-label="刷新 ${esc(p.name)} 的限额">↻</button></div>` +
+    `<div class="usage-body">${body}</div>`;
+}
+
+function paintUsage(p, loading) {
+  const el = document.querySelector(`.usage[data-provider="${CSS.escape(p.name)}"]`);
+  if (el) el.innerHTML = usageMarkup(p, loading);
+}
+
+async function refreshUsage(name, silent) {
+  const p = providers.find(x => x.name === name);
+  if (!p || !p.usageKind || p.usageLoading) return;
+  p.usageLoading = true;
+  paintUsage(p, true);
+  try {
+    const j = await api('/api/usage', { name });
+    p.usage = j.usage;
+    if (!silent && p.usage && (p.usage.error || p.usage.lastError)) {
+      setStatus(`${name}: ${p.usage.error || p.usage.lastError}`, 'bad');
+    }
+  } catch (e) {
+    p.usage = { fetchedAt: new Date().toISOString(), error: e.message };
+    if (!silent) setStatus(`${name}: ${e.message}`, 'bad');
+  } finally {
+    p.usageLoading = false;
+    paintUsage(p, false);
+  }
+}
+
 async function reload() {
   const j = await api('/api/providers').catch(e => {
     setStatus('加载失败：' + e.message, 'bad');
@@ -230,6 +330,7 @@ async function reload() {
         `<div class="meta">${p.url ? esc(p.url) : '官方 API'} &nbsp;·&nbsp; ${esc(p.model)}</div>` +
         `<div class="tok">Token: ${esc(p.masked)}</div>` +
       `</div>` +
+      `${p.usageKind ? `<div class="usage" data-provider="${esc(p.name)}">${usageMarkup(p, false)}</div>` : ''}` +
       `<div class="acts">` +
         `<button data-act="edit">编辑</button>` +
         `<button data-act="test">测试</button>` +
@@ -241,9 +342,17 @@ async function reload() {
       if (act === 'test') return testProvider(p.name);
       if (act === 'del') return delProvider(p.name);
       if (act === 'default') return setProviderDefault(p.name);
+      if (act === 'usage') return refreshUsage(p.name, false);
       openDialog(p);   // 点卡片任意处 = 编辑
     });
     list.appendChild(card);
+  }
+  // 打开页面后只刷新缺失或超过 5 分钟的条目；旧值会先显示，查询不阻塞列表。
+  for (const p of providers) {
+    const age = Date.now() - Date.parse((p.usage && p.usage.fetchedAt) || '');
+    if (p.usageKind && (!p.usage || !Number.isFinite(age) || age > USAGE_STALE_MS)) {
+      refreshUsage(p.name, true);
+    }
   }
 }
 
@@ -405,6 +514,9 @@ $('f-json').addEventListener('keydown', e => {
 });
 
 reload();
+setInterval(() => {
+  for (const p of providers) if (p.usageKind) refreshUsage(p.name, true);
+}, USAGE_STALE_MS);
 </script>
 </body>
 </html>
