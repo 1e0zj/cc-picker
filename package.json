@@ -1,6 +1,6 @@
 {
   "name": "cc-picker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claude Code 多供应商启动器 — 一个终端一个供应商；附账号识别状态栏与 Web 配置管理器",
   "license": "MIT",
   "repository": {
