@@ -27,7 +27,7 @@ if (args.includes('--list')) {
 }
 const noBrowser = args.includes('--no-browser');
 
-// ---------- 数据操作（与 Windows 版 cc-manager.ps1 行为一致） ----------
+// ---------- 数据操作 ----------
 
 // 保存（cc-switch 式 JSON 编辑）：text 为文件完整内容，服务端校验后原样落盘。
 // 允许 env 之外的顶层键（provider 文件本质是 --settings 层，可带其他配置）。

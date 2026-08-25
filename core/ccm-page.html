@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Claude Code 供应商管理</title>
 <style>
-  /* 配色与 Windows 版 cc-manager.ps1 完全一致（浅色卡片 / 跟随系统深浅色） */
+  /* 配色沿用旧 PowerShell 版管理器（浅色卡片 / 跟随系统深浅色） */
   :root {
     --bg: #F3F4F6; --card: #FFFFFF; --border: #E3E5EA; --text: #1F2328; --sub: #71767F;
     --inputBg: #FFFFFF; --inputBorder: #D9DDE3; --chipBg: #ECEEF2; --chipHover: #E0E3E9;
@@ -397,7 +397,7 @@ async function openSettingsDialog() {
 }
 function closeDialog() { $('overlay').classList.add('hidden'); }
 
-// 预设模板（与 install.sh / cc-setup.ps1 的 providers 模板一致）
+// 预设模板（与 install.sh 的 providers 模板一致）
 const PRESETS = {
   official: {
     env: {
