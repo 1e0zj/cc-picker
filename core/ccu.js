@@ -42,9 +42,11 @@ function fmtEntry(p, entry) {
   if (entry.balance !== undefined) return '余额 ¥' + entry.balance;
   const tier = k => (entry.tiers || []).find(t => t.kind === k);
   // 5h 列定宽，周 才能纵向对齐：tier 最宽 "100% (10h14m)" 11 字符，pad 12。
-  // pad 按可见宽度算——直接 padEnd 会把 ANSI 转义算进去补错
+  // pad 按可见宽度算——直接 padEnd 会把 ANSI 转义算进去补错。
+  // 没有周限额的（部分 GLM 套餐）不显示 周 列——同网页与状态栏的口径
   const padTier = s => s + ' '.repeat(Math.max(0, 12 - s.replace(/\x1b\[[0-9;]*m/g, '').length));
-  return `5h ${padTier(fmtTier(tier('h5')))} 周 ${fmtTier(tier('week'))}`;
+  const wk = tier('week');
+  return `5h ${padTier(fmtTier(tier('h5')))}${wk ? ' 周 ' + fmtTier(wk) : ''}`;
 }
 
 async function main() {
@@ -61,7 +63,8 @@ async function main() {
   const width = Math.max(...providers.map(p => p.name.length));
   for (const p of providers) {
     const entry = cache[p.name];
-    console.log(p.name.padEnd(width) + '  ' + fmtEntry(p, entry) + fmtAge(entry));
+    // trimEnd：无周列时 5h 的定宽 pad 会留行尾空格
+    console.log((p.name.padEnd(width) + '  ' + fmtEntry(p, entry) + fmtAge(entry)).trimEnd());
   }
 }
 

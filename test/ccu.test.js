@@ -39,6 +39,8 @@ test('fmtEntry 按 provider 类型分派', () => {
   const ds = { name: 'deepseek', url: 'https://api.deepseek.com', token: 'x' };
   const other = { name: 'proxy', url: 'https://elsewhere', token: 'x' };
   assert.ok(ccu.fmtEntry(glm, { tiers: [{ kind: 'h5', pct: 40, resetMs: 0 }] }).includes('5h'));
+  // 没有周限额的套餐不显示 周 列（同网页/状态栏口径）
+  assert.ok(!ccu.fmtEntry(glm, { tiers: [{ kind: 'h5', pct: 40, resetMs: 0 }] }).includes('周'));
   assert.equal(ccu.fmtEntry(ds, { balance: '87.20' }), '余额 ¥87.20');
   assert.equal(ccu.fmtEntry(other, undefined), '—');
   assert.ok(ccu.fmtEntry(glm, { error: 'HTTP 401' }).includes('HTTP 401'));
