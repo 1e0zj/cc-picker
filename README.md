@@ -31,7 +31,7 @@ cc-picker 的做法很简洁：用 claude 启动参数 [`--settings`](#工作原
 
 | 能力 | 说明 |
 |---|---|
-| `ccp` 命令 | 终端内菜单选供应商启动；熟练后 `ccp glm`、`ccp deepseek-work` 直达 |
+| `ccp` 命令 | 终端内菜单选供应商启动；熟练后 `ccp glm`、`ccp deepseek-work` 直达；其余参数透传给 claude——`ccp glm --continue`、`ccp --resume` |
 | `ccm` 管理器 | GUI 增删改供应商配置（cc-switch 式 JSON 直编）；卡片直接显示 Claude 官方/GLM 的 5 小时与 7 天限额、DeepSeek CNY 余额，支持 5 分钟缓存和单卡刷新；GLM / DeepSeek / 官方一键预设；连通测试；「默认」一键切换裸 `claude` 的供应商、「通用配置」直编全局 settings.json——可替代 cc-switch。浏览器页面，本地服务仅监听 127.0.0.1 |
 | 状态栏 | 常驻显示 `[账号] 模型 · 目录 · 上下文% · 5h% · 周%`，用 token 反查配置文件识别账号——连裸 `claude` 都能识别当前用的哪个号 |
 | 右键菜单 | Windows 资源管理器、macOS Finder 里右键文件夹 →「Claude Code（选模型）」→ 新终端窗口在该目录打开，选供应商启动；选择界面就是 `ccp` 的终端菜单。随安装一起装上 |

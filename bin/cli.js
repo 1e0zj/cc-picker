@@ -45,6 +45,7 @@ ${MARK_BEGIN}
 # ccp           交互菜单选择 provider 后在当前终端启动 claude
 # ccp <名称>    直接用 ~/.claude/providers/<名称>.json 启动（如 ccp glm）
 # ccp default   不带 --settings，走当前全局默认配置
+# 其余参数透传 claude：ccp glm --continue、ccp --resume
 ccp() { node "$HOME/.claude/ccp.js" "$@"; }
 # ccm — 打开供应商配置管理器（Web UI）
 ccm() { node "$HOME/.claude/ccm.js" "$@"; }
