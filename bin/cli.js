@@ -4,10 +4,10 @@
 //
 // 用法:
 //   cc-picker            安装（= install；npx 一次装的默认动作）
-//   cc-picker install    部署核心脚本到 ~/.claude、写 shell 的 ccp/ccm 函数、配 statusLine、
-//                        装文件管理器右键菜单（--no-menu 跳过这一项）
-//   cc-picker update     拉最新 npm 包、刷新 ~/.claude 下的脚本、迁移 PS 版旧安装
-//                        （重写注册表菜单、换 statusLine、删 ps1 残留）
+//   cc-picker install    部署核心脚本到 ~/.claude、写 shell 的 ccp/ccm/ccu 函数、
+//                        配 statusLine、装文件管理器右键菜单（--no-menu 跳过这一项）
+//   cc-picker update     拉最新 npm 包、刷新 ~/.claude 下的脚本与 shell 函数块、
+//                        迁移 PS 版旧安装（重写注册表菜单、换 statusLine、删 ps1 残留）
 //   cc-picker uninstall  清理脚本/缓存/shell 函数/statusLine（providers 含 token，保留）
 //   cc-picker status     查看安装状态
 //   cc-picker menu ...   文件管理器右键菜单的装/卸（Windows / macOS，见 core/cc-menu.js）
@@ -29,7 +29,7 @@ const PROVIDERS_DIR = path.join(CLAUDE_DIR, 'providers');
 const SETTINGS_FILE = path.join(CLAUDE_DIR, 'settings.json');
 
 const CORE_FILES = ['ccp.js', 'ccm.js', 'ccm-page.html', 'cc-statusline.js', 'cc-usage.js',
-                    'cc-lib.js', 'cc-menu.js'];
+                    'cc-lib.js', 'cc-menu.js', 'ccu.js'];
 
 // 已下线的 PowerShell 版部署在 ~/.claude 的脚本（cc-setup.ps1 时代装的）——update 清掉
 const PS_FILES = ['cc-launch.ps1', 'cc-manager.ps1', 'cc-statusline.ps1', 'cc-usage.ps1'];
@@ -48,6 +48,8 @@ ${MARK_BEGIN}
 ccp() { node "$HOME/.claude/ccp.js" "$@"; }
 # ccm — 打开供应商配置管理器（Web UI）
 ccm() { node "$HOME/.claude/ccm.js" "$@"; }
+# ccu [名称…] — 命令行速览限额/余额与重置倒计时（缺省全部）
+ccu() { node "$HOME/.claude/ccu.js" "$@"; }
 ${MARK_END}`;
 
 const TEMPLATES = {
@@ -131,6 +133,31 @@ function ensureStatusline() {
   return '已有 statusLine，跳过';
 }
 
+// shell 的 ccp/ccm/ccu 函数（幂等：先移除旧标记块再追加）——install 与 update 共用，
+// 函数块内容完全由包版本决定，update 重写一遍才能带上新增命令
+function ensureShellFunctions() {
+  const installRc = rc => {
+    const existing = fs.existsSync(rc) ? fs.readFileSync(rc, 'utf8') : '';
+    fs.writeFileSync(rc, stripBlock(existing).replace(/\s+$/, '') + '\n' + CC_BLOCK + '\n');
+  };
+  let wantBash = fs.existsSync(path.join(HOME, '.bashrc'));
+  let wantZsh = fs.existsSync(path.join(HOME, '.zshrc'));
+  const shell = process.env.SHELL || '';
+  // 包含匹配而非结尾匹配：Git Bash 的 SHELL 是 /bin/bash.exe（带 .exe）
+  if (/bash/.test(shell)) wantBash = true;
+  if (/zsh/.test(shell)) wantZsh = true;
+  const wrote = [];
+  if (wantBash) {
+    installRc(path.join(HOME, '.bashrc'));
+    // 登录 shell 默认不读 .bashrc，这里手动加载
+    const bp = path.join(HOME, '.bash_profile');
+    if (!fs.existsSync(bp)) fs.writeFileSync(bp, '[ -f ~/.bashrc ] && . ~/.bashrc\n');
+    wrote.push('bash');
+  }
+  if (wantZsh) { installRc(path.join(HOME, '.zshrc')); wrote.push('zsh'); }
+  return wrote;
+}
+
 // ---------- install ----------
 
 function install(noMenu, isUpdate) {
@@ -152,31 +179,12 @@ function install(noMenu, isUpdate) {
   }
   say('[2/5] providers 目录就绪');
 
-  // 3. shell 的 ccp 命令（幂等：先移除旧标记块再追加）
-  const installRc = rc => {
-    const existing = fs.existsSync(rc) ? fs.readFileSync(rc, 'utf8') : '';
-    fs.writeFileSync(rc, stripBlock(existing).replace(/\s+$/, '') + '\n' + CC_BLOCK + '\n');
-  };
-  let wantBash = fs.existsSync(path.join(HOME, '.bashrc'));
-  let wantZsh = fs.existsSync(path.join(HOME, '.zshrc'));
-  const shell = process.env.SHELL || '';
-  // 包含匹配而非结尾匹配：Git Bash 的 SHELL 是 /bin/bash.exe（带 .exe）
-  if (/bash/.test(shell)) wantBash = true;
-  if (/zsh/.test(shell)) wantZsh = true;
-
-  if (wantBash) {
-    installRc(path.join(HOME, '.bashrc'));
-    // 登录 shell 默认不读 .bashrc，这里手动加载
-    const bp = path.join(HOME, '.bash_profile');
-    if (!fs.existsSync(bp)) fs.writeFileSync(bp, '[ -f ~/.bashrc ] && . ~/.bashrc\n');
-    say('[3/5] bash ccp 命令已装入 ~/.bashrc');
-  }
-  if (wantZsh) {
-    installRc(path.join(HOME, '.zshrc'));
-    say('[3/5] zsh ccp 命令已装入 ~/.zshrc');
-  }
-  if (!wantBash && !wantZsh) {
-    say('[3/5] 未识别到 bash/zsh，跳过（请手动在 shell 配置里加 ccp/ccm 函数）');
+  // 3. shell 的 ccp/ccm/ccu 函数（幂等重写标记块）
+  const wrote = ensureShellFunctions();
+  if (wrote.includes('bash')) say('[3/5] bash 的 ccp/ccm/ccu 函数已装入 ~/.bashrc');
+  if (wrote.includes('zsh')) say('[3/5] zsh 的 ccp/ccm/ccu 函数已装入 ~/.zshrc');
+  if (!wrote.length) {
+    say('[3/5] 未识别到 bash/zsh，跳过（请手动在 shell 配置里加 ccp/ccm/ccu 函数）');
   }
 
   // 4. settings.json 的 statusLine（用户自己的配置不动，见 ensureStatusline）
@@ -277,6 +285,10 @@ function update() {
   }
   say(stale.length ? `~/.claude 下 ${stale.length} 个脚本已刷新` : '~/.claude 下的脚本已是最新');
 
+  // shell 函数块随包版本走（新增命令如 ccu 靠这步进入 shell）
+  const wrote = ensureShellFunctions();
+  if (wrote.length) say(`      shell 函数块已刷新（${wrote.join('/')}）`);
+
   // PS 版升上来的机器还带着三样旧东西，这里一并迁移：
   //   注册表菜单指向 cc-launch.ps1、statusLine 跑 cc-statusline.ps1、~/.claude 下的 ps1 脚本
   if (MENU_PLATFORM) {
@@ -334,7 +346,7 @@ function status() {
 
 const USAGE = L(
   '用法: cc-picker [install|update|uninstall|status] [--no-menu]   # 缺省 install',
-  '      update 拉最新 npm 包、刷新 ~/.claude 脚本、迁移 PS 版旧安装（菜单/statusLine/残留）',
+  '      update 拉最新 npm 包、刷新 ~/.claude 脚本与 shell 函数块、迁移 PS 版旧安装',
   '      --no-menu 只在 install 时有意义：跳过文件管理器右键菜单',
   '      cc-picker menu [install|uninstall|status]  # 文件管理器右键菜单（Windows / macOS）');
 

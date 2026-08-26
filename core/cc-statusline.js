@@ -52,15 +52,8 @@ function main(data) {
   const pctColorOf = v => v >= 80 ? ansi('#E74C3C') : v >= 50 ? ansi('#F1C40F') : ansi('#2ECC71');
   const pctColor = pctColorOf(pct);
 
-  // 重置倒计时：>48h 显示 "6d18h"，>1h 显示 "2h31m"，<1h 显示 "37m"；已过期/无效返回空
-  const countdown = ms => {
-    if (!(ms > 60000)) return '';
-    const mins = Math.floor(ms / 60000);
-    const h = Math.floor(mins / 60);
-    if (h >= 48) { const d = Math.floor(h / 24); return `${d}d${h % 24}h`; }
-    if (h > 0) return `${h}h${mins % 60}m`;
-    return `${mins}m`;
-  };
+  // 重置倒计时刻度（6d18h / 2h31m / 37m）在 cc-lib，与 ccu 共用
+  const countdown = lib.countdown;
   const nowMs = Date.now();
 
   // ---- 限额/余额 ----

@@ -164,14 +164,15 @@ async function queryProviderUsage(p) {
 }
 
 async function refreshUsage(names = []) {
+  // 并行查询；写缓存（重读-合并-写回）是同步段，JS 无抢占，并发完成不会互相撕裂。
   // 每次写入前重读缓存，避免 CCM 同时刷新不同卡片时互相覆盖结果。
   const wanted = new Set(names);
   const providers = lib.getProviders().filter(p => !wanted.size || wanted.has(p.name));
   const results = {};
 
-  for (const p of providers) {
+  await Promise.all(providers.map(async p => {
     let entry = await queryProviderUsage(p);
-    if (!entry) continue;
+    if (!entry) return;
     const cacheMap = readCache();
     const old = cacheMap[p.name];
     if (entry.error && old && !old.error
@@ -181,7 +182,7 @@ async function refreshUsage(names = []) {
     results[p.name] = entry;
     cacheMap[p.name] = entry;
     writeCache(cacheMap);
-  }
+  }));
   return { ...readCache(), ...results };
 }
 

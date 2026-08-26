@@ -35,7 +35,7 @@ cc-picker 的做法很简洁：用 claude 启动参数 [`--settings`](#工作原
 | `ccm` 管理器 | GUI 增删改供应商配置（cc-switch 式 JSON 直编）；卡片直接显示 Claude 官方/GLM 的 5 小时与 7 天限额、DeepSeek CNY 余额，支持 5 分钟缓存和单卡刷新；GLM / DeepSeek / 官方一键预设；连通测试；「默认」一键切换裸 `claude` 的供应商、「通用配置」直编全局 settings.json——可替代 cc-switch。浏览器页面，本地服务仅监听 127.0.0.1 |
 | 状态栏 | 常驻显示 `[账号] 模型 · 目录 · 上下文% · 5h% · 周%`，用 token 反查配置文件识别账号——连裸 `claude` 都能识别当前用的哪个号 |
 | 右键菜单 | Windows 资源管理器、macOS Finder 里右键文件夹 →「Claude Code（选模型）」→ 新终端窗口在该目录打开，选供应商启动；选择界面就是 `ccp` 的终端菜单。随安装一起装上 |
-| 限额显示 | 状态栏里的官方订阅读 Claude Code 自带的 rate_limits；CCM 的官方订阅复用本机 Claude Code OAuth 登录查询。GLM（5h/周）与 DeepSeek（余额）由后台查询并缓存（`cc-usage`），查询失败会保留最后一次成功结果 |
+| 限额显示 | 状态栏里的官方订阅读 Claude Code 自带的 rate_limits；CCM 的官方订阅复用本机 Claude Code OAuth 登录查询。GLM（5h/周）与 DeepSeek（余额）由后台查询并缓存（`cc-usage`），查询失败会保留最后一次成功结果。终端里 `ccu` 一条命令速览全部供应商的用量与重置倒计时 |
 
 ## 快速开始
 
@@ -54,13 +54,14 @@ ccm
 # 3. 新开终端
 ccp           # 菜单选择
 ccp glm       # 直达某个配置
+ccu           # 限额/余额速览（也可 ccu glm 只看一家）
 ```
 
-安装会部署到 `~/.claude`：`ccp.js`（启动器）、`ccm.js` + `ccm-page.html`（Web 管理器）、`cc-statusline.js`（状态栏）、`cc-usage.js`（限额/余额查询）、`cc-menu.js`（右键菜单装卸）、`providers/*.json`（配置模板），外加 bash / zsh 的 `ccp` / `ccm` 函数（Windows 走 Git Bash）与 settings.json 的 `statusLine` 键。
+安装会部署到 `~/.claude`：`ccp.js`（启动器）、`ccm.js` + `ccm-page.html`（Web 管理器）、`cc-statusline.js`（状态栏）、`cc-usage.js`（限额/余额查询）、`ccu.js`（限额命令行速览）、`cc-menu.js`（右键菜单装卸）、`providers/*.json`（配置模板），外加 bash / zsh 的 `ccp` / `ccm` / `ccu` 函数（Windows 走 Git Bash）与 settings.json 的 `statusLine` 键。
 
 右键菜单也在其中——Windows 写 HKCU 注册表（不需要管理员），macOS 往 `~/Library/Services` 放一个快速操作。不想要就 `cc-picker install --no-menu`，或事后 `cc-picker menu uninstall`；反过来单独补装是 `cc-picker menu install`。
 
-运行时都落在 `~/.claude` 这个稳定路径——换 node 版本、卸掉 npm 包都不影响已经装好的部分。npm 全局装的用户另有 `ccp` / `ccm` / `cc-picker` 三个命令，维护用 `cc-picker install | uninstall | status`。
+运行时都落在 `~/.claude` 这个稳定路径——换 node 版本、卸掉 npm 包都不影响已经装好的部分。npm 全局装的用户另有 `ccp` / `ccm` / `ccu` / `cc-picker` 四个命令，维护用 `cc-picker install | uninstall | status`。
 
 ## 更新
 
@@ -68,7 +69,7 @@ ccp glm       # 直达某个配置
 cc-picker update
 ```
 
-它会去拉最新的 npm 包，把新版脚本刷进 `~/.claude`，并做旧版迁移：已装的右键菜单重写一遍注册表、还指向 `cc-statusline.ps1` 的 statusLine 换成 Node 版、删掉 PowerShell 时代部署的 `cc-*.ps1` 残留（`providers/*.json` 与用户自己的 settings.json 配置不碰）。等价的写法是直接 `npm install -g cc-picker@latest`——包的 postinstall 会做同样的脚本刷新，迁移则在下次 `cc-picker update` 时补上。
+它会去拉最新的 npm 包，把新版脚本刷进 `~/.claude`，重写 shell 函数块（新增命令如 `ccu` 靠这步进 shell），并做旧版迁移：已装的右键菜单重写一遍注册表、还指向 `cc-statusline.ps1` 的 statusLine 换成 Node 版、删掉 PowerShell 时代部署的 `cc-*.ps1` 残留（`providers/*.json` 与用户自己的 settings.json 配置不碰）。等价的写法是直接 `npm install -g cc-picker@latest`——包的 postinstall 会做同样的脚本刷新，函数块与迁移则在下次 `cc-picker update` 时补上。
 
 之所以需要这一步刷新：`~/.claude` 下跑的是安装时复制的副本（statusLine、shell 函数、右键菜单都写死指向那个稳定路径，换 node 版本或卸掉 npm 包都不受影响），而 npm 换包只换 `node_modules` 里的源文件。
 

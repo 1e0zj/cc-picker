@@ -55,6 +55,17 @@ function readProviderJson(file) {
 
 function providerPath(name) { return path.join(PROVIDERS_DIR, name + '.json'); }
 
+// 限额重置倒计时：>48h "6d18h"，>1h "2h31m"，<1h "37m"；已过期/太短返回空。
+// 状态栏与 ccu 共用同一口径
+function countdown(ms) {
+  if (!(ms > 60000)) return '';
+  const mins = Math.floor(ms / 60000);
+  const h = Math.floor(mins / 60);
+  if (h >= 48) { const d = Math.floor(h / 24); return `${d}d${h % 24}h`; }
+  if (h > 0) return `${h}h${mins % 60}m`;
+  return `${mins}m`;
+}
+
 // 对应 PS 版 Get-Providers：名称 / 地址 / token（含脱敏）/ 模型 / 完整 env
 function getProviders() {
   return listProviderFiles().map(f => {
@@ -105,5 +116,5 @@ function writeSettings(obj) {
 module.exports = {
   HOME, CLAUDE_DIR, PROVIDERS_DIR, SETTINGS_FILE, USAGE_CACHE, USAGE_LOCK,
   readTextNoBom, listProviderFiles, readProviderEnv, readProviderJson, getProviders,
-  providerPath, saveProvider, brandColor, readSettings, writeSettings, normalizeDir,
+  providerPath, saveProvider, brandColor, readSettings, writeSettings, normalizeDir, countdown,
 };

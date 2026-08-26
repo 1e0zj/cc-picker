@@ -30,7 +30,8 @@
   "bin": {
     "cc-picker": "bin/cli.js",
     "ccp": "core/ccp.js",
-    "ccm": "core/ccm.js"
+    "ccm": "core/ccm.js",
+    "ccu": "core/ccu.js"
   },
   "files": [
     "bin",
