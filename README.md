@@ -116,17 +116,9 @@ cc-picker menu uninstall   # 只想去掉右键菜单、别的都留着
 
 v0.1.2 起 Windows 也统一走 Node 版，`cc-setup.ps1` 不再维护。右键菜单已经用 Node 重做，跟着 `cc-picker install` 一起装（选择界面从 WinForms 弹窗换成了 `ccp` 的终端菜单）；没保留下来的只有终端标签按厂商着色这一项。
 
-旧安装需要手动清一次：
+老机器跑一次 `cc-picker update` 即自动迁移：重写注册表里的右键菜单、把指向 `cc-statusline.ps1` 的 statusLine 换成 Node 版、删除旧版部署的 `cc-*.ps1` 脚本（providers 与缓存不动，Node 版继续用）。
 
-```powershell
-# 旧右键菜单（Node 版装的时候会覆盖同名键，但旧值指向 ps1，清掉更省事）
-Remove-Item 'HKCU:\Software\Classes\Directory\shell\ClaudePicker','HKCU:\Software\Classes\Directory\Background\shell\ClaudePicker' -Recurse
-# 旧脚本（providers / 缓存不动，Node 版继续用）
-Remove-Item ~\.claude\cc-launch.ps1, ~\.claude\cc-manager.ps1, ~\.claude\cc-statusline.ps1, ~\.claude\cc-usage.ps1
-# pwsh profile 里删掉 ">>> cc 多供应商启动器 >>>" 标记块——删掉后 pwsh 里的 ccp/ccm 才会落到 npm 全局的 Node 版
-```
-
-settings.json 里的 `statusLine` 若还指向 `cc-statusline.ps1`，改成 `node <用户目录>/.claude/cc-statusline.js`——`cc-picker install` 见到已有 statusLine 会跳过，不会自动改。
+唯一需要手动的是 pwsh profile 里的 `>>> cc 多供应商启动器 >>>` 标记块——删掉后 pwsh 里的 `ccp` / `ccm` 才会落到 npm 全局的 Node 版命令。
 
 ## FAQ
 
