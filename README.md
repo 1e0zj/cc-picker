@@ -68,9 +68,9 @@ ccp glm       # 直达某个配置
 cc-picker update
 ```
 
-它会去拉最新的 npm 包，再把新版脚本刷进 `~/.claude`。等价的写法是直接 `npm install -g cc-picker@latest`——包的 postinstall 会做同样的刷新。
+它会去拉最新的 npm 包，把新版脚本刷进 `~/.claude`，并做旧版迁移：已装的右键菜单重写一遍注册表、还指向 `cc-statusline.ps1` 的 statusLine 换成 Node 版、删掉 PowerShell 时代部署的 `cc-*.ps1` 残留（`providers/*.json` 与用户自己的 settings.json 配置不碰）。等价的写法是直接 `npm install -g cc-picker@latest`——包的 postinstall 会做同样的脚本刷新，迁移则在下次 `cc-picker update` 时补上。
 
-之所以需要这一步刷新：`~/.claude` 下跑的是安装时复制的副本（statusLine、shell 函数、右键菜单都写死指向那个稳定路径，换 node 版本或卸掉 npm 包都不受影响），而 npm 换包只换 `node_modules` 里的源文件。刷新只动脚本本身，`providers/*.json`、settings.json、右键菜单注册项都不碰。
+之所以需要这一步刷新：`~/.claude` 下跑的是安装时复制的副本（statusLine、shell 函数、右键菜单都写死指向那个稳定路径，换 node 版本或卸掉 npm 包都不受影响），而 npm 换包只换 `node_modules` 里的源文件。
 
 `cc-picker status` 会逐个比对 `~/.claude` 里的脚本和当前包，不一致会直接点名。克隆仓库装的走 `git pull && bash install.sh`。
 

@@ -85,6 +85,14 @@ function windowsInstall() {
   }
 }
 
+// 装过吗？update 用：装过才重写一遍（menuInstall 幂等，/f 覆盖同名键）。
+// 从 PS 版升上来的机器注册表命令还指向 cc-launch.ps1，重写即完成迁移。
+function windowsInstalled() {
+  return REG_KEYS.some(({ key }) => {
+    try { reg(['query', key + '\\command', '/ve']); return true; } catch { return false; }
+  });
+}
+
 function windowsUninstall() {
   let n = 0;
   for (const { key } of REG_KEYS) {
@@ -404,6 +412,7 @@ function macStatus() {
 const UNSUPPORTED = 'cc-menu: 只支持 Windows 与 macOS——Linux 各文件管理器机制不同，请直接用 ccp';
 
 function menuInstall() {
+  if (sandboxed()) return;
   if (process.platform === 'win32') return windowsInstall();
   if (process.platform === 'darwin') return macInstall();
   console.error(UNSUPPORTED);
@@ -411,6 +420,7 @@ function menuInstall() {
 }
 
 function menuUninstall() {
+  if (sandboxed()) return;
   if (process.platform === 'win32') return windowsUninstall();
   if (process.platform === 'darwin') return macUninstall();
   console.error(UNSUPPORTED);
@@ -418,9 +428,25 @@ function menuUninstall() {
 }
 
 function menuStatus() {
+  if (sandboxed()) return;
   if (process.platform === 'win32') return windowsStatus();
   if (process.platform === 'darwin') return macStatus();
   console.log('  不支持当前平台（' + process.platform + '）');
+}
+
+// update 用：菜单装过才值得重写（没装的不能借 update 装上——装不装由 install 决定）
+function menuInstalled() {
+  if (process.platform === 'win32') return windowsInstalled();
+  if (process.platform === 'darwin') return fs.existsSync(SERVICE_DIR);
+  return false;
+}
+
+// CC_HOME 是测试/沙箱重定向，注册表和 ~/Library/Services 却是全机的——
+// 沙箱跑 install/update 时若不拦着，会把真机菜单指到沙箱路径
+function sandboxed() {
+  if (!process.env.CC_HOME) return false;
+  console.log('CC_HOME 沙箱模式：跳过右键菜单操作（注册表/服务是全机的，不随沙箱重定向）');
+  return true;
 }
 
 if (require.main === module) {
@@ -434,6 +460,6 @@ if (require.main === module) {
   }
 }
 
-module.exports = { menuInstall, menuUninstall, menuStatus, MENU_TITLE,
+module.exports = { menuInstall, menuUninstall, menuStatus, menuInstalled, MENU_TITLE,
   // 下面几个只是给测试用：命令行拼装与 plist 生成
   windowsCommand, macInfoPlist, macWorkflow };

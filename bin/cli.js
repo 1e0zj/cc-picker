@@ -6,7 +6,8 @@
 //   cc-picker            安装（= install；npx 一次装的默认动作）
 //   cc-picker install    部署核心脚本到 ~/.claude、写 shell 的 ccp/ccm 函数、配 statusLine、
 //                        装文件管理器右键菜单（--no-menu 跳过这一项）
-//   cc-picker update     拉最新 npm 包并刷新 ~/.claude 下的脚本（一步更新）
+//   cc-picker update     拉最新 npm 包、刷新 ~/.claude 下的脚本、迁移 PS 版旧安装
+//                        （重写注册表菜单、换 statusLine、删 ps1 残留）
 //   cc-picker uninstall  清理脚本/缓存/shell 函数/statusLine（providers 含 token，保留）
 //   cc-picker status     查看安装状态
 //   cc-picker menu ...   文件管理器右键菜单的装/卸（Windows / macOS，见 core/cc-menu.js）
@@ -29,6 +30,9 @@ const SETTINGS_FILE = path.join(CLAUDE_DIR, 'settings.json');
 
 const CORE_FILES = ['ccp.js', 'ccm.js', 'ccm-page.html', 'cc-statusline.js', 'cc-usage.js',
                     'cc-lib.js', 'cc-menu.js'];
+
+// 已下线的 PowerShell 版部署在 ~/.claude 的脚本（cc-setup.ps1 时代装的）——update 清掉
+const PS_FILES = ['cc-launch.ps1', 'cc-manager.ps1', 'cc-statusline.ps1', 'cc-usage.ps1'];
 
 // 右键菜单只有 Windows / macOS 有实现（Linux 各文件管理器机制不同）
 const MENU_PLATFORM = process.platform === 'win32' || process.platform === 'darwin';
@@ -105,6 +109,28 @@ function writeSettings(obj) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(obj, null, 2) + '\n');
 }
 
+// statusLine 三种情况：没有 → 配上；指向本项目已下线的 PS 版（cc-statusline.ps1）→
+// 换成 Node 版；用户自己的 → 不动。install 与 update 共用。
+function ensureStatusline() {
+  let settings = readSettings();
+  const cmd = settings && settings.statusLine && String(settings.statusLine.command || '');
+  // 正斜杠跨平台：node 在 Windows 也接受
+  const nodeCmd = 'node ' + (CLAUDE_DIR + '/cc-statusline.js').replace(/\\/g, '/');
+  if (cmd === nodeCmd) return '已是 Node 版，跳过';
+  if (!cmd) {
+    if (!settings) settings = {};
+    settings.statusLine = { type: 'command', command: nodeCmd };
+    writeSettings(settings);
+    return '已加 statusLine';
+  }
+  if (cmd.includes('cc-statusline.ps1')) {
+    settings.statusLine = { type: 'command', command: nodeCmd };
+    writeSettings(settings);
+    return 'PS 版 statusLine 已替换为 Node 版';
+  }
+  return '已有 statusLine，跳过';
+}
+
 // ---------- install ----------
 
 function install(noMenu, isUpdate) {
@@ -153,20 +179,8 @@ function install(noMenu, isUpdate) {
     say('[3/5] 未识别到 bash/zsh，跳过（请手动在 shell 配置里加 ccp/ccm 函数）');
   }
 
-  // 4. settings.json 的 statusLine（已有则跳过，不动别家配置）
-  let settings = readSettings();
-  if (settings && settings.statusLine) {
-    say('[4/5] settings.json 已有 statusLine，跳过');
-  } else {
-    if (!settings) settings = {};
-    settings.statusLine = {
-      type: 'command',
-      // 正斜杠跨平台：node 在 Windows 也接受
-      command: 'node ' + (CLAUDE_DIR + '/cc-statusline.js').replace(/\\/g, '/'),
-    };
-    writeSettings(settings);
-    say('[4/5] settings.json 已加 statusLine');
-  }
+  // 4. settings.json 的 statusLine（用户自己的配置不动，见 ensureStatusline）
+  say(`[4/5] settings.json ${ensureStatusline()}`);
 
   // 5. 文件管理器右键菜单（默认装——改注册表 / 写 ~/Library/Services，--no-menu 可跳过）
   if (!MENU_PLATFORM) {
@@ -208,7 +222,7 @@ function uninstall() {
     try { menuModule().menuUninstall(); } catch {}
   }
   // 3. 脚本与缓存（providers 保留：内含 token）
-  for (const f of [...CORE_FILES, 'cc-usage-cache.json', 'cc-usage.last']) {
+  for (const f of [...CORE_FILES, ...PS_FILES, 'cc-usage-cache.json', 'cc-usage.last']) {
     const p = path.join(CLAUDE_DIR, f);
     try { fs.unlinkSync(p); } catch {}
   }
@@ -262,8 +276,25 @@ function update() {
     try { fs.copyFileSync(path.join(CORE_DIR, f), path.join(CLAUDE_DIR, f)); } catch {}
   }
   say(stale.length ? `~/.claude 下 ${stale.length} 个脚本已刷新` : '~/.claude 下的脚本已是最新');
+
+  // PS 版升上来的机器还带着三样旧东西，这里一并迁移：
+  //   注册表菜单指向 cc-launch.ps1、statusLine 跑 cc-statusline.ps1、~/.claude 下的 ps1 脚本
+  if (MENU_PLATFORM) {
+    try {
+      const m = menuModule();
+      if (m.menuInstalled()) {
+        process.stdout.write('      ');   // 跟 menuInstall 自己那句成功提示拼成一行
+        m.menuInstall();
+      }
+    } catch (e) { say('右键菜单刷新失败（不影响其他部分）: ' + e.message); }
+  }
+  say(`      settings.json ${ensureStatusline()}`);
+  const gone = PS_FILES.filter(f => {
+    try { fs.unlinkSync(path.join(CLAUDE_DIR, f)); return true; } catch { return false; }
+  });
+  if (gone.length) say(`      已删除 PS 版残留: ${gone.join(', ')}`);
+
   say(`现在是 v${now}`);
-  say('（statusLine、shell 函数、右键菜单指向的路径没变，不需要重装）');
 }
 
 // ---------- status ----------
@@ -281,6 +312,9 @@ function status() {
   const s = readSettings();
   const sl = s && s.statusLine && String(s.statusLine.command || '');
   say(`statusLine: ${sl ? sl : '未配置'}`);
+  if (sl.includes('cc-statusline.ps1')) say('          还是 PS 版——跑 cc-picker update 换成 Node 版');
+  const psLeft = PS_FILES.filter(f => fs.existsSync(path.join(CLAUDE_DIR, f)));
+  if (psLeft.length) say(`PS 残留:   ${psLeft.join(', ')}（跑 cc-picker update 清理）`);
   for (const name of ['.bashrc', '.zshrc']) {
     const rc = path.join(HOME, name);
     if (fs.existsSync(rc)) {
@@ -300,7 +334,7 @@ function status() {
 
 const USAGE = L(
   '用法: cc-picker [install|update|uninstall|status] [--no-menu]   # 缺省 install',
-  '      update 拉最新 npm 包并刷新 ~/.claude 下的脚本',
+  '      update 拉最新 npm 包、刷新 ~/.claude 脚本、迁移 PS 版旧安装（菜单/statusLine/残留）',
   '      --no-menu 只在 install 时有意义：跳过文件管理器右键菜单',
   '      cc-picker menu [install|uninstall|status]  # 文件管理器右键菜单（Windows / macOS）');
 
