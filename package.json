@@ -37,6 +37,7 @@
     "bin",
     "core",
     "README.md",
+    "README.en.md",
     "LICENSE"
   ],
   "engines": {

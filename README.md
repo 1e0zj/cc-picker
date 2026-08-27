@@ -2,6 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/cc-picker.svg)](https://www.npmjs.com/package/cc-picker)
 
+**中文** | [English](README.en.md)
+
 Claude Code 多供应商启动器 —— 多开终端各用各的模型，当前用的哪个号、还剩多少量，状态栏一眼看清。
 
 ## 解决什么问题
