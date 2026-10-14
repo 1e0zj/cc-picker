@@ -39,18 +39,18 @@ test('fmtEntry 按 provider 类型分派', () => {
   const ds = { name: 'deepseek', url: 'https://api.deepseek.com', token: 'x' };
   const other = { name: 'proxy', url: 'https://elsewhere', token: 'x' };
   assert.ok(ccu.fmtEntry(glm, { tiers: [{ kind: 'h5', pct: 40, resetMs: 0 }] }).includes('5h'));
-  // 没有周限额的套餐不显示 周 列（同网页/状态栏口径）
-  assert.ok(!ccu.fmtEntry(glm, { tiers: [{ kind: 'h5', pct: 40, resetMs: 0 }] }).includes('周'));
+  // 没有周限额的套餐不显示 week 列（同网页/状态栏口径）
+  assert.ok(!ccu.fmtEntry(glm, { tiers: [{ kind: 'h5', pct: 40, resetMs: 0 }] }).includes('week'));
   assert.equal(ccu.fmtEntry(ds, { balance: '87.20' }), '余额 ¥87.20');
   assert.equal(ccu.fmtEntry(other, undefined), '—');
   assert.ok(ccu.fmtEntry(glm, { error: 'HTTP 401' }).includes('HTTP 401'));
 });
 
-test('5h 列定宽，周 纵向对齐（含 TTY 上色）', () => {
+test('5h 列定宽，week 纵向对齐（含 TTY 上色）', () => {
   const p = { name: 'glm', url: 'https://open.bigmodel.cn/api/anthropic', token: 'x' };
   const entry = tiers => ({ tiers });
   const strip = s => s.replace(/\x1b\[[0-9;]*m/g, '');
-  const col5h = e => strip(ccu.fmtEntry(p, e)).indexOf('周');
+  const col5h = e => strip(ccu.fmtEntry(p, e)).indexOf('week');
   const withCd = entry([{ kind: 'h5', pct: 1, resetMs: Date.now() + 3600000 },
                         { kind: 'week', pct: 35, resetMs: Date.now() + 86400000 }]);
   const noCd = entry([{ kind: 'h5', pct: 0, resetMs: 0 }, { kind: 'week', pct: 79, resetMs: 0 }]);

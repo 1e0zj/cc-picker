@@ -43,10 +43,10 @@ function fmtEntry(p, entry) {
   const tier = k => (entry.tiers || []).find(t => t.kind === k);
   // 5h 列定宽，周 才能纵向对齐：tier 最宽 "100% (10h14m)" 11 字符，pad 12。
   // pad 按可见宽度算——直接 padEnd 会把 ANSI 转义算进去补错。
-  // 没有周限额的（部分 GLM 套餐）不显示 周 列——同网页与状态栏的口径
+  // 没有周限额的（部分 GLM 套餐）不显示 week 列——同网页与状态栏的口径
   const padTier = s => s + ' '.repeat(Math.max(0, 12 - s.replace(/\x1b\[[0-9;]*m/g, '').length));
   const wk = tier('week');
-  return `5h ${padTier(fmtTier(tier('h5')))}${wk ? ' 周 ' + fmtTier(wk) : ''}`;
+  return `5h ${padTier(fmtTier(tier('h5')))}${wk ? ' week ' + fmtTier(wk) : ''}`;
 }
 
 async function main() {

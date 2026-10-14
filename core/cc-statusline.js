@@ -95,7 +95,7 @@ function main(data) {
     }
     if (sd && sd.used_percentage != null) {
       const p = Math.trunc(+sd.used_percentage);
-      usageSeg += ` · 周 ${pctColorOf(p)}${p}%${CEND}${resetCd(sd)}`;
+      usageSeg += ` · week ${pctColorOf(p)}${p}%${CEND}${resetCd(sd)}`;
     }
   } else if (prov !== 'official') {
     let ue = null;
@@ -107,7 +107,7 @@ function main(data) {
         // 旧缓存无 resetMs 字段时不显示，下一轮缓存刷新（≤10 分钟）自然带上
         const cd = t.resetMs ? countdown(+t.resetMs - nowMs) : '';
         if (t.kind === 'h5')   usageSeg += ` · 5h ${pctColorOf(p)}${p}%${CEND}${cd ? ' ' + cd : ''}`;
-        if (t.kind === 'week') usageSeg += ` · 周 ${pctColorOf(p)}${p}%${CEND}${cd ? ' ' + cd : ''}`;
+        if (t.kind === 'week') usageSeg += ` · week ${pctColorOf(p)}${p}%${CEND}${cd ? ' ' + cd : ''}`;
       }
       if (ue.balance) usageSeg += ` · ¥${ue.balance}`;
     } else if (!ue) {
